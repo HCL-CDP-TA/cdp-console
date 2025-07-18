@@ -4,6 +4,10 @@ const nextConfig = {
     ignoreDuringBuilds: true,
   },
   images: { unoptimized: true },
+  // Netlify configuration
+  trailingSlash: true,
+  distDir: '.next',
+  target: 'serverless',
 };
 
 module.exports = nextConfig;
