@@ -6,8 +6,7 @@ const nextConfig = {
   images: { unoptimized: true },
   // Netlify configuration
   trailingSlash: true,
-  distDir: '.next',
-  target: 'serverless',
-};
+  output: "standalone",
+}
 
-module.exports = nextConfig;
+module.exports = nextConfig
