@@ -8,3 +8,10 @@
 [dev]
   command = "npm run dev"
   port = 3000
+
+# Force HTTPS redirects
+[[redirects]]
+  from = "http://*"
+  to = "https://:splat"
+  status = 301
+  force = true

@@ -5,7 +5,6 @@ const nextConfig = {
   },
   images: { unoptimized: true },
   // Netlify configuration
-  trailingSlash: true,
   output: "standalone",
 }
 
