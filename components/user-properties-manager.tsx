@@ -29,7 +29,8 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination"
-import { Plus, Edit2, Trash2, Database, RefreshCw, Search } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Plus, Edit2, Trash2, Database, RefreshCw, Search, AlertCircle } from "lucide-react"
 import { Tenant, UserProperty } from "@/types/tenant"
 import { validateAuthState } from "@/lib/auth"
 
@@ -46,6 +47,7 @@ export function UserPropertiesManager({ tenant, onAuthExpired }: UserPropertiesM
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [editingProperty, setEditingProperty] = useState<UserProperty | null>(null)
   const [authError, setAuthError] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
   const [formData, setFormData] = useState({
@@ -97,6 +99,7 @@ export function UserPropertiesManager({ tenant, onAuthExpired }: UserPropertiesM
 
   const fetchProperties = async () => {
     setLoading(true)
+    setErrorMessage(null) // Clear any previous errors
     try {
       console.log("Fetching properties for tenant:", tenant.clientId)
       console.log("API endpoint:", tenant.apiEndpoint)
@@ -142,6 +145,7 @@ export function UserPropertiesManager({ tenant, onAuthExpired }: UserPropertiesM
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
+    setErrorMessage(null) // Clear any previous errors
 
     try {
       const payload = {
@@ -185,6 +189,7 @@ export function UserPropertiesManager({ tenant, onAuthExpired }: UserPropertiesM
   }
 
   const handleEdit = (property: UserProperty) => {
+    setErrorMessage(null) // Clear any previous errors
     setEditingProperty(property)
     setFormData({
       dmpDataPointCode: property.dmpDataPointCode,
@@ -201,6 +206,8 @@ export function UserPropertiesManager({ tenant, onAuthExpired }: UserPropertiesM
     console.log("typeof propertyName:", typeof propertyName)
 
     setLoading(true)
+    setErrorMessage(null) // Clear any previous errors
+
     try {
       const response = await fetch(`/api/user-properties/${tenant.clientId}/${propertyName}`, {
         method: "DELETE",
@@ -214,9 +221,22 @@ export function UserPropertiesManager({ tenant, onAuthExpired }: UserPropertiesM
       if (response.ok) {
         await fetchProperties()
       } else {
-        console.error("Failed to delete property:", response.statusText)
+        // Handle error responses
+        let errorMessage = "Failed to delete user property"
+        try {
+          const errorData = await response.json()
+          if (errorData.error) {
+            errorMessage = errorData.error
+          }
+        } catch (parseError) {
+          console.error("Failed to parse error response:", parseError)
+        }
+        setErrorMessage(errorMessage)
+        console.error("Failed to delete property:", errorMessage)
       }
     } catch (error) {
+      const errorMsg = "Error deleting property: Network or server error"
+      setErrorMessage(errorMsg)
       console.error("Error deleting property:", error)
     } finally {
       setLoading(false)
@@ -261,7 +281,12 @@ export function UserPropertiesManager({ tenant, onAuthExpired }: UserPropertiesM
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             Refresh
           </Button>
-          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+          <Dialog
+            open={isAddDialogOpen}
+            onOpenChange={open => {
+              if (open) setErrorMessage(null) // Clear errors when opening dialog
+              setIsAddDialogOpen(open)
+            }}>
             <DialogTrigger asChild>
               <Button className="flex items-center gap-2">
                 <Plus className="h-4 w-4" />
@@ -358,6 +383,20 @@ export function UserPropertiesManager({ tenant, onAuthExpired }: UserPropertiesM
         </div>
       </div>
 
+      {errorMessage && (
+        <Alert variant="destructive" className="relative">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription className="pr-8">{errorMessage}</AlertDescription>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setErrorMessage(null)}
+            className="absolute right-2 top-2 h-6 w-6 p-0 text-red-600 hover:text-red-800">
+            ×
+          </Button>
+        </Alert>
+      )}
+
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -448,7 +487,9 @@ export function UserPropertiesManager({ tenant, onAuthExpired }: UserPropertiesM
                             <AlertDialogHeader>
                               <AlertDialogTitle>Delete Property</AlertDialogTitle>
                               <AlertDialogDescription>
-                                Are you sure you want to delete "{property.userProperty}"? This action cannot be undone.
+                                Are you sure you want to delete "
+                                {property.dmpDataPointCode || property.userProperty || "this property"}"? This action
+                                cannot be undone.
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
@@ -542,7 +583,12 @@ export function UserPropertiesManager({ tenant, onAuthExpired }: UserPropertiesM
         </CardContent>
       </Card>
 
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+      <Dialog
+        open={isEditDialogOpen}
+        onOpenChange={open => {
+          if (open) setErrorMessage(null) // Clear errors when opening dialog
+          setIsEditDialogOpen(open)
+        }}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Edit User Property</DialogTitle>

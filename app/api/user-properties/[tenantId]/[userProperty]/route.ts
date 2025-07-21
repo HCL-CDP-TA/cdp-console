@@ -59,7 +59,20 @@ export async function DELETE(
     )
 
     if (!response.ok) {
-      return NextResponse.json({ error: `API request failed: ${response.statusText}` }, { status: response.status })
+      let errorMessage = `API request failed: ${response.statusText}`
+
+      try {
+        const errorData = await response.json()
+        if (errorData.message) {
+          errorMessage = errorData.message
+        } else if (errorData.error) {
+          errorMessage = errorData.error
+        }
+      } catch (parseError) {
+        console.error("Failed to parse error response:", parseError)
+      }
+
+      return NextResponse.json({ error: errorMessage }, { status: response.status })
     }
 
     return NextResponse.json({ success: true })
