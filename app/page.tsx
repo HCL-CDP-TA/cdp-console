@@ -18,6 +18,7 @@ import {
 import { TenantManager } from "@/components/tenant-manager"
 import { UserPropertiesManager } from "@/components/user-properties-manager"
 import { DataMappingsManager } from "@/components/data-mappings-manager"
+import { trackNavigation, trackTenantSelection, trackAuthentication } from "@/lib/analytics"
 import { ChannelPriority } from "@/components/channel-priority"
 import { Dashboard } from "@/components/dashboard"
 import { LoginForm } from "@/components/login-form"
@@ -31,6 +32,18 @@ export default function Home() {
   const [tenants, setTenants] = useState<Tenant[]>([])
   const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null)
   const [activeTab, setActiveTab] = useState("dashboard")
+
+  // Wrapper function for tracking navigation
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab)
+    trackNavigation(tab, selectedTenant?.clientId)
+  }
+
+  // Wrapper function for tracking tenant selection
+  const handleTenantSelection = (tenant: Tenant) => {
+    setSelectedTenant(tenant)
+    trackTenantSelection(tenant.clientId, tenant.name)
+  }
 
   useEffect(() => {
     const authState = getAuthState()
@@ -54,6 +67,7 @@ export default function Home() {
   }
 
   const handleLogout = () => {
+    trackAuthentication("logout")
     clearAuthState()
     setIsAuthenticated(false)
     setAuthUsername(null)
@@ -111,7 +125,7 @@ export default function Home() {
           <div className="p-4 border-b border-slate-200">
             <div className="flex items-center justify-between mb-3">
               <h4 className="text-sm font-medium text-slate-700">Tenants ({tenants.length})</h4>
-              <Button variant="ghost" size="sm" onClick={() => setActiveTab("tenants")} className="h-6 px-2 text-xs">
+              <Button variant="ghost" size="sm" onClick={() => handleTabChange("tenants")} className="h-6 px-2 text-xs">
                 <Settings className="h-3 w-3 mr-1" />
                 Manage
               </Button>
@@ -120,7 +134,7 @@ export default function Home() {
               {tenants.map(tenant => (
                 <button
                   key={tenant.id}
-                  onClick={() => setSelectedTenant(tenant)}
+                  onClick={() => handleTenantSelection(tenant)}
                   className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
                     selectedTenant?.id === tenant.id
                       ? "bg-blue-50 text-blue-700 border border-blue-200"
@@ -141,7 +155,7 @@ export default function Home() {
         <nav className="flex-1 p-4">
           <div className="space-y-1">
             <button
-              onClick={() => setActiveTab("dashboard")}
+              onClick={() => handleTabChange("dashboard")}
               disabled={!selectedTenant}
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                 activeTab === "dashboard"
@@ -154,7 +168,7 @@ export default function Home() {
               Dashboard
             </button>
             <button
-              onClick={() => setActiveTab("tenants")}
+              onClick={() => handleTabChange("tenants")}
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                 activeTab === "tenants"
                   ? "bg-blue-50 text-blue-700 border border-blue-200"
@@ -164,7 +178,7 @@ export default function Home() {
               Tenant Management
             </button>
             <button
-              onClick={() => setActiveTab("properties")}
+              onClick={() => handleTabChange("properties")}
               disabled={!selectedTenant}
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                 activeTab === "properties"
@@ -177,7 +191,7 @@ export default function Home() {
               User Properties
             </button>
             <button
-              onClick={() => setActiveTab("mappings")}
+              onClick={() => handleTabChange("mappings")}
               disabled={!selectedTenant}
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                 activeTab === "mappings"
@@ -190,7 +204,7 @@ export default function Home() {
               Data Mappings
             </button>
             <button
-              onClick={() => setActiveTab("users")}
+              onClick={() => handleTabChange("users")}
               disabled={!selectedTenant}
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                 activeTab === "users"
@@ -203,7 +217,7 @@ export default function Home() {
               User Management
             </button>
             <button
-              onClick={() => setActiveTab("channel-priority")}
+              onClick={() => handleTabChange("channel-priority")}
               disabled={!selectedTenant}
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                 activeTab === "channel-priority"
@@ -232,7 +246,7 @@ export default function Home() {
                     <BarChart3 className="h-12 w-12 text-slate-400 mx-auto mb-4" />
                     <h3 className="text-lg font-semibold text-slate-900 mb-2">No Tenant Selected</h3>
                     <p className="text-slate-600 mb-4">Please select a tenant to view dashboard metrics</p>
-                    <Button onClick={() => setActiveTab("tenants")}>Select Tenant</Button>
+                    <Button onClick={() => handleTabChange("tenants")}>Select Tenant</Button>
                   </CardContent>
                 </Card>
               )}
@@ -270,7 +284,7 @@ export default function Home() {
                     <Database className="h-12 w-12 text-slate-400 mx-auto mb-4" />
                     <h3 className="text-lg font-semibold text-slate-900 mb-2">No Tenant Selected</h3>
                     <p className="text-slate-600 mb-4">Please select a tenant to manage user properties</p>
-                    <Button onClick={() => setActiveTab("tenants")}>Select Tenant</Button>
+                    <Button onClick={() => handleTabChange("tenants")}>Select Tenant</Button>
                   </CardContent>
                 </Card>
               )}
@@ -293,7 +307,7 @@ export default function Home() {
                     <MapPin className="h-12 w-12 text-slate-400 mx-auto mb-4" />
                     <h3 className="text-lg font-semibold text-slate-900 mb-2">No Tenant Selected</h3>
                     <p className="text-slate-600 mb-4">Please select a tenant to manage data mappings</p>
-                    <Button onClick={() => setActiveTab("tenants")}>Select Tenant</Button>
+                    <Button onClick={() => handleTabChange("tenants")}>Select Tenant</Button>
                   </CardContent>
                 </Card>
               )}
@@ -316,7 +330,7 @@ export default function Home() {
                     <Users className="h-12 w-12 text-slate-400 mx-auto mb-4" />
                     <h3 className="text-lg font-semibold text-slate-900 mb-2">No Tenant Selected</h3>
                     <p className="text-slate-600 mb-4">Please select a tenant to manage users</p>
-                    <Button onClick={() => setActiveTab("tenants")}>Select Tenant</Button>
+                    <Button onClick={() => handleTabChange("tenants")}>Select Tenant</Button>
                   </CardContent>
                 </Card>
               )}
@@ -339,7 +353,7 @@ export default function Home() {
                     <Layers className="h-12 w-12 text-slate-400 mx-auto mb-4" />
                     <h3 className="text-lg font-semibold text-slate-900 mb-2">No Tenant Selected</h3>
                     <p className="text-slate-600 mb-4">Please select a tenant to view channel priority</p>
-                    <Button onClick={() => setActiveTab("tenants")}>Select Tenant</Button>
+                    <Button onClick={() => handleTabChange("tenants")}>Select Tenant</Button>
                   </CardContent>
                 </Card>
               )}

@@ -22,6 +22,13 @@ import { Plus, Edit2, Trash2, Building2, Key, Globe, User, Eye, EyeOff } from "l
 import { Tenant, Client } from "@/types/tenant"
 import { getAuthState } from "@/lib/auth"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  trackDataManagement,
+  trackError,
+  trackAPICall,
+  trackFormInteraction,
+  trackDetailedUserAction,
+} from "@/lib/analytics"
 
 interface TenantFormProps {
   formData: {
@@ -268,7 +275,14 @@ export function TenantManager({
     e.preventDefault()
     const now = new Date().toISOString()
 
+    const isEditing = !!editingTenant
+    trackFormInteraction(isEditing ? "edit" : "add", "tenant", "submit")
+
     if (editingTenant) {
+      trackDataManagement("update", "tenant" as any, {
+        tenantName: formData.name,
+        tenantId: formData.clientId,
+      })
       onUpdateTenant({
         ...editingTenant,
         ...formData,
@@ -277,6 +291,10 @@ export function TenantManager({
       setIsEditDialogOpen(false)
       setEditingTenant(null)
     } else {
+      trackDataManagement("create", "tenant" as any, {
+        tenantName: formData.name,
+        tenantId: formData.clientId,
+      })
       onAddTenant({
         id: crypto.randomUUID(),
         ...formData,
@@ -289,6 +307,10 @@ export function TenantManager({
   }
 
   const handleEdit = (tenant: Tenant) => {
+    trackDetailedUserAction("edit", "tenant", {
+      tenantName: tenant.name,
+      tenantId: tenant.clientId,
+    })
     setEditingTenant(tenant)
     setFormData({
       name: tenant.name,
@@ -381,7 +403,13 @@ export function TenantManager({
                       <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
                         <AlertDialogAction
-                          onClick={() => onDeleteTenant(tenant.id)}
+                          onClick={() => {
+                            trackDataManagement("delete", "tenant" as any, {
+                              tenantName: tenant.name,
+                              tenantId: tenant.clientId,
+                            })
+                            onDeleteTenant(tenant.id)
+                          }}
                           className="bg-red-600 hover:bg-red-700">
                           Delete
                         </AlertDialogAction>

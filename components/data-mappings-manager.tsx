@@ -39,6 +39,14 @@ import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { X } from "lucide-react"
 import { validateAuthState } from "@/lib/auth"
+import {
+  trackDataManagement,
+  trackError,
+  trackAPICall,
+  trackFormInteraction,
+  trackDetailedUserAction,
+  trackSearchFilter,
+} from "@/lib/analytics"
 
 interface DataMappingsManagerProps {
   tenant: Tenant
@@ -88,8 +96,8 @@ export function DataMappingsManager({ tenant, onAuthExpired }: DataMappingsManag
 
   const fetchMappings = async (dataSource: DataSource) => {
     setLoading(true)
+    const apiDataSource = getApiDataSource(dataSource)
     try {
-      const apiDataSource = getApiDataSource(dataSource)
       const response = await fetch(`/api/mappings/${tenant.clientId}/${apiDataSource}`, {
         headers: {
           "x-api-key": tenant.apiKey,
@@ -101,13 +109,18 @@ export function DataMappingsManager({ tenant, onAuthExpired }: DataMappingsManag
       if (response.ok) {
         const data = await response.json()
         setMappings(data)
+        trackAPICall(`/api/mappings/${tenant.clientId}/${apiDataSource}`, "GET", true)
       } else {
         console.error("Failed to fetch mappings:", response.statusText)
         setMappings([])
+        trackAPICall(`/api/mappings/${tenant.clientId}/${apiDataSource}`, "GET", false)
+        trackError("api_error", `Failed to fetch mappings: ${response.statusText}`, "data-mappings-manager")
       }
     } catch (error) {
       console.error("Error fetching mappings:", error)
       setMappings([])
+      trackAPICall(`/api/mappings/${tenant.clientId}/${apiDataSource}`, "GET", false)
+      trackError("network_error", `Error fetching mappings: ${error}`, "data-mappings-manager")
     } finally {
       setLoading(false)
     }
@@ -322,6 +335,8 @@ export function DataMappingsManager({ tenant, onAuthExpired }: DataMappingsManag
     }
 
     setLoading(true)
+    const isEditing = !!editingMapping
+    trackFormInteraction(isEditing ? "edit" : "add", "data_mapping", "submit")
 
     try {
       // For new mappings, use the selected dataSource from the form
@@ -353,8 +368,17 @@ export function DataMappingsManager({ tenant, onAuthExpired }: DataMappingsManag
           setIsEditDialogOpen(false)
           setEditingMapping(null)
           resetForm()
+          trackDataManagement("update", "data_mapping", {
+            userProperty: formData.userProperty,
+            profileUpdateFunction: formData.profileUpdateFunction,
+            dataSource: selectedDataSource,
+          })
+          trackAPICall(`/api/mappings/${tenant.clientId}/${apiDataSource}/update`, "PUT", true)
         } else {
           console.error("Failed to update mapping:", response.statusText)
+          trackAPICall(`/api/mappings/${tenant.clientId}/${apiDataSource}/update`, "PUT", false)
+          trackFormInteraction("edit", "data_mapping", "error")
+          trackError("api_error", `Failed to update mapping: ${response.statusText}`, "data-mappings-manager")
         }
       } else {
         // Create new mapping
@@ -380,18 +404,33 @@ export function DataMappingsManager({ tenant, onAuthExpired }: DataMappingsManag
           await fetchMappings(editingMapping ? selectedDataSource : formData.dataSource)
           setIsAddDialogOpen(false)
           resetForm()
+          trackDataManagement("create", "data_mapping", {
+            userProperty: formData.userProperty,
+            profileUpdateFunction: formData.profileUpdateFunction,
+            dataSource: formData.dataSource,
+          })
+          trackAPICall(`/api/mappings/${tenant.clientId}/${apiDataSource}`, "POST", true)
         } else {
           console.error("Failed to create mapping:", response.statusText)
+          trackAPICall(`/api/mappings/${tenant.clientId}/${apiDataSource}`, "POST", false)
+          trackFormInteraction("add", "data_mapping", "error")
+          trackError("api_error", `Failed to create mapping: ${response.statusText}`, "data-mappings-manager")
         }
       }
     } catch (error) {
       console.error("Error saving mapping:", error)
+      trackFormInteraction(editingMapping ? "edit" : "add", "data_mapping", "error")
+      trackError("network_error", `Error saving mapping: ${error}`, "data-mappings-manager")
     } finally {
       setLoading(false)
     }
   }
 
   const handleEdit = (mapping: DataMapping) => {
+    trackDetailedUserAction("edit", "data_mappings", {
+      userProperty: mapping.UserProperty,
+      dataSource: selectedDataSource,
+    })
     setEditingMapping(mapping)
 
     const metadataString = mapping.Metadata || "{}"
@@ -414,8 +453,8 @@ export function DataMappingsManager({ tenant, onAuthExpired }: DataMappingsManag
 
   const handleDelete = async (userProperty: string) => {
     setLoading(true)
+    const apiDataSource = getApiDataSource(selectedDataSource)
     try {
-      const apiDataSource = getApiDataSource(selectedDataSource)
       const response = await fetch(`/api/mappings/${tenant.clientId}/${apiDataSource}/${userProperty}/delete`, {
         method: "DELETE",
         headers: {
@@ -427,11 +466,20 @@ export function DataMappingsManager({ tenant, onAuthExpired }: DataMappingsManag
 
       if (response.ok) {
         await fetchMappings(selectedDataSource)
+        trackDataManagement("delete", "data_mapping", {
+          userProperty,
+          dataSource: selectedDataSource,
+        })
+        trackAPICall(`/api/mappings/${tenant.clientId}/${apiDataSource}/${userProperty}/delete`, "DELETE", true)
       } else {
         console.error("Failed to delete mapping:", response.statusText)
+        trackAPICall(`/api/mappings/${tenant.clientId}/${apiDataSource}/${userProperty}/delete`, "DELETE", false)
+        trackError("api_error", `Failed to delete mapping: ${response.statusText}`, "data-mappings-manager")
       }
     } catch (error) {
       console.error("Error deleting mapping:", error)
+      trackAPICall(`/api/mappings/${tenant.clientId}/${apiDataSource}/${userProperty}/delete`, "DELETE", false)
+      trackError("network_error", `Error deleting mapping: ${error}`, "data-mappings-manager")
     } finally {
       setLoading(false)
     }
@@ -711,7 +759,13 @@ export function DataMappingsManager({ tenant, onAuthExpired }: DataMappingsManag
         </div>
       </div>
 
-      <Tabs value={selectedDataSource} onValueChange={value => setSelectedDataSource(value as DataSource)}>
+      <Tabs
+        value={selectedDataSource}
+        onValueChange={value => {
+          const newDataSource = value as DataSource
+          setSelectedDataSource(newDataSource)
+          trackDetailedUserAction("view", "data_mappings", { dataSource: newDataSource })
+        }}>
         <TabsList className="grid w-full grid-cols-2 max-w-md">
           <TabsTrigger value="analyze_post" className="flex items-center gap-2">
             <Database className="h-4 w-4" />
@@ -738,7 +792,12 @@ export function DataMappingsManager({ tenant, onAuthExpired }: DataMappingsManag
                     <Input
                       placeholder="Search mappings..."
                       value={searchTerm}
-                      onChange={e => setSearchTerm(e.target.value)}
+                      onChange={e => {
+                        setSearchTerm(e.target.value)
+                        if (e.target.value) {
+                          trackSearchFilter("search", "data_mappings", e.target.value)
+                        }
+                      }}
                       className="w-64"
                     />
                   </div>
