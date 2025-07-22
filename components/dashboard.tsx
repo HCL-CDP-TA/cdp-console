@@ -18,6 +18,7 @@ import {
   BarChart3,
 } from "lucide-react"
 import { Tenant, UserProperty, DataMapping } from "@/types/tenant"
+import { trackDetailedUserAction, trackError } from "@/lib/analytics"
 
 interface DashboardProps {
   tenant: Tenant | null
@@ -51,6 +52,8 @@ export function Dashboard({ tenant }: DashboardProps) {
     if (!tenant) return
 
     setLoading(true)
+    trackDetailedUserAction("refresh", "dashboard", { tenantId: tenant.clientId })
+
     try {
       // Fetch user properties
       const propertiesResponse = await fetch(`/api/user-properties/${tenant.clientId}`, {
@@ -113,8 +116,20 @@ export function Dashboard({ tenant }: DashboardProps) {
       })
 
       setLastUpdated(new Date())
+
+      // Track successful dashboard data load
+      trackDetailedUserAction("view", "dashboard", {
+        tenantId: tenant.clientId,
+        totalProperties: properties.length,
+        totalMappings: analyzePostMappings.length + dataIngestionMappings.length,
+        analyzePostMappings: analyzePostMappings.length,
+        dataIngestionMappings: dataIngestionMappings.length,
+        profileFields,
+        mandatoryMappings,
+      })
     } catch (error) {
       console.error("Error fetching dashboard data:", error)
+      trackError("network_error", (error as Error).message, "dashboard")
     } finally {
       setLoading(false)
     }

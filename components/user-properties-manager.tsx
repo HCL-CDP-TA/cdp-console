@@ -33,6 +33,14 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Plus, Edit2, Trash2, Database, RefreshCw, Search, AlertCircle } from "lucide-react"
 import { Tenant, UserProperty } from "@/types/tenant"
 import { validateAuthState } from "@/lib/auth"
+import {
+  trackDataManagement,
+  trackError,
+  trackAPICall,
+  trackFormInteraction,
+  trackDetailedUserAction,
+  trackSearchFilter,
+} from "@/lib/analytics"
 
 interface UserPropertiesManagerProps {
   tenant: Tenant
@@ -118,12 +126,17 @@ export function UserPropertiesManager({ tenant, onAuthExpired }: UserPropertiesM
         const data = await response.json()
         console.log("Properties data:", data)
         setProperties(data)
+        trackAPICall("/api/user-properties", "GET", true)
       } else {
         const errorText = await response.text()
         console.error("Failed to fetch properties:", response.statusText, errorText)
+        trackAPICall("/api/user-properties", "GET", false)
+        trackError("api_error", `Failed to fetch properties: ${response.statusText}`, "user-properties-manager")
       }
     } catch (error) {
       console.error("Error fetching properties:", error)
+      trackAPICall("/api/user-properties", "GET", false)
+      trackError("network_error", `Error fetching properties: ${error}`, "user-properties-manager")
     } finally {
       setLoading(false)
     }
@@ -146,6 +159,9 @@ export function UserPropertiesManager({ tenant, onAuthExpired }: UserPropertiesM
     e.preventDefault()
     setLoading(true)
     setErrorMessage(null) // Clear any previous errors
+
+    const formType = editingProperty ? "edit" : "add"
+    trackFormInteraction(formType, "user_property", "submit")
 
     try {
       const payload = {
@@ -178,11 +194,26 @@ export function UserPropertiesManager({ tenant, onAuthExpired }: UserPropertiesM
         setIsEditDialogOpen(false)
         setEditingProperty(null)
         resetForm()
+
+        // Track successful operation
+        trackDataManagement(editingProperty ? "update" : "create", "user_property", {
+          propertyName: formData.dmpDataPointCode,
+          dataType: formData.dataType,
+          preference: formData.preference,
+        })
+        trackAPICall(url, method, true)
+        resetForm()
       } else {
         console.error("Failed to save property:", response.statusText)
+        trackAPICall(url, method, false)
+        trackFormInteraction(editingProperty ? "edit" : "add", "user_property", "error")
+        trackError("api_error", `Failed to save property: ${response.statusText}`, "user-properties-manager")
       }
     } catch (error) {
       console.error("Error saving property:", error)
+      trackAPICall("/api/user-properties", editingProperty ? "PUT" : "POST", false)
+      trackFormInteraction(editingProperty ? "edit" : "add", "user_property", "error")
+      trackError("network_error", `Error saving property: ${error}`, "user-properties-manager")
     } finally {
       setLoading(false)
     }
@@ -190,6 +221,10 @@ export function UserPropertiesManager({ tenant, onAuthExpired }: UserPropertiesM
 
   const handleEdit = (property: UserProperty) => {
     setErrorMessage(null) // Clear any previous errors
+    trackDetailedUserAction("edit", "user_properties", {
+      propertyName: property.dmpDataPointCode,
+      dataType: property.dataType,
+    })
     setEditingProperty(property)
     setFormData({
       dmpDataPointCode: property.dmpDataPointCode,
@@ -220,6 +255,8 @@ export function UserPropertiesManager({ tenant, onAuthExpired }: UserPropertiesM
 
       if (response.ok) {
         await fetchProperties()
+        trackDataManagement("delete", "user_property", { propertyName })
+        trackAPICall(`/api/user-properties/${tenant.clientId}/${propertyName}`, "DELETE", true)
       } else {
         // Handle error responses
         let errorMessage = "Failed to delete user property"
@@ -233,11 +270,15 @@ export function UserPropertiesManager({ tenant, onAuthExpired }: UserPropertiesM
         }
         setErrorMessage(errorMessage)
         console.error("Failed to delete property:", errorMessage)
+        trackAPICall(`/api/user-properties/${tenant.clientId}/${propertyName}`, "DELETE", false)
+        trackError("api_error", `Failed to delete property: ${errorMessage}`, "user-properties-manager")
       }
     } catch (error) {
       const errorMsg = "Error deleting property: Network or server error"
       setErrorMessage(errorMsg)
       console.error("Error deleting property:", error)
+      trackAPICall(`/api/user-properties/${tenant.clientId}/${propertyName}`, "DELETE", false)
+      trackError("network_error", `Error deleting property: ${error}`, "user-properties-manager")
     } finally {
       setLoading(false)
     }
@@ -261,10 +302,12 @@ export function UserPropertiesManager({ tenant, onAuthExpired }: UserPropertiesM
   }, [searchTerm])
 
   const handlePageChange = (page: number) => {
+    trackSearchFilter("paginate", "user_properties", `page_${page}`)
     setCurrentPage(page)
   }
 
   const handlePageSizeChange = (newPageSize: string) => {
+    trackSearchFilter("paginate", "user_properties", `page_size_${newPageSize}`)
     setPageSize(parseInt(newPageSize))
     setCurrentPage(1) // Reset to first page when changing page size
   }
@@ -277,14 +320,24 @@ export function UserPropertiesManager({ tenant, onAuthExpired }: UserPropertiesM
           <p className="text-slate-600">Manage user properties for {tenant.name}</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={fetchProperties} disabled={loading} className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              trackDetailedUserAction("refresh", "user_properties")
+              fetchProperties()
+            }}
+            disabled={loading}
+            className="flex items-center gap-2">
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             Refresh
           </Button>
           <Dialog
             open={isAddDialogOpen}
             onOpenChange={open => {
-              if (open) setErrorMessage(null) // Clear errors when opening dialog
+              if (open) {
+                setErrorMessage(null) // Clear errors when opening dialog
+                trackFormInteraction("add", "user_property", "open")
+              }
               setIsAddDialogOpen(open)
             }}>
             <DialogTrigger asChild>
@@ -368,6 +421,7 @@ export function UserPropertiesManager({ tenant, onAuthExpired }: UserPropertiesM
                     type="button"
                     variant="outline"
                     onClick={() => {
+                      trackFormInteraction("add", "user_property", "cancel")
                       setIsAddDialogOpen(false)
                       resetForm()
                     }}>
@@ -410,7 +464,12 @@ export function UserPropertiesManager({ tenant, onAuthExpired }: UserPropertiesM
                 <Input
                   placeholder="Search properties..."
                   value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
+                  onChange={e => {
+                    setSearchTerm(e.target.value)
+                    if (e.target.value) {
+                      trackSearchFilter("search", "user_properties", e.target.value)
+                    }
+                  }}
                   className="w-64"
                 />
               </div>
@@ -500,6 +559,10 @@ export function UserPropertiesManager({ tenant, onAuthExpired }: UserPropertiesM
                                   const propertyName =
                                     property.userProperty || property.dmpDataPointCode || property.tenantId
                                   console.log("Using property name:", propertyName)
+                                  trackDetailedUserAction("delete", "user_properties", {
+                                    propertyName,
+                                    dataType: property.dataType,
+                                  })
                                   handleDelete(propertyName)
                                 }}
                                 className="bg-red-600 hover:bg-red-700">
@@ -586,7 +649,10 @@ export function UserPropertiesManager({ tenant, onAuthExpired }: UserPropertiesM
       <Dialog
         open={isEditDialogOpen}
         onOpenChange={open => {
-          if (open) setErrorMessage(null) // Clear errors when opening dialog
+          if (open) {
+            setErrorMessage(null) // Clear errors when opening dialog
+            trackFormInteraction("edit", "user_property", "open")
+          }
           setIsEditDialogOpen(open)
         }}>
         <DialogContent className="sm:max-w-lg">

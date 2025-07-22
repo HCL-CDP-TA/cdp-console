@@ -9,6 +9,7 @@ import { RefreshCw, Layers, Hash, TrendingUp } from "lucide-react"
 import { Tenant } from "@/types/tenant"
 import type { ChannelPriority } from "@/types/tenant"
 import { getAuthState, clearAuthState } from "@/lib/auth"
+import { trackAPICall, trackDetailedUserAction, trackError } from "@/lib/analytics"
 
 interface ChannelPriorityProps {
   tenant: Tenant
@@ -40,17 +41,31 @@ export function ChannelPriority({ tenant, onAuthExpired }: ChannelPriorityProps)
         // Sort by priority for better display
         const sortedData = data.sort((a: ChannelPriority, b: ChannelPriority) => a.Priority - b.Priority)
         setPriorities(sortedData)
+        trackAPICall(`/api/channel-priority/${tenant.clientId}`, "GET", true)
+        trackDetailedUserAction("refresh", "channel_priority", {
+          channelCount: sortedData.length,
+          tenantId: tenant.clientId,
+        })
       } else if (response.status === 401) {
         console.log("Authentication expired - redirecting to login")
+        trackAPICall(`/api/channel-priority/${tenant.clientId}`, "GET", false)
+        trackError(
+          "authentication_expired",
+          `Failed to fetch channel priority: ${response.statusText}`,
+          "channel_priority",
+        )
         clearAuthState()
         onAuthExpired()
         return
       } else {
         console.error("Failed to fetch channel priority:", response.statusText)
+        trackAPICall(`/api/channel-priority/${tenant.clientId}`, "GET", false)
+        trackError("api_error", `Failed to fetch channel priority: ${response.statusText}`, "channel_priority")
         setPriorities([])
       }
     } catch (error) {
       console.error("Error fetching channel priority:", error)
+      trackError("network_error", (error as Error).message, "channel_priority")
       setPriorities([])
     } finally {
       setLoading(false)
@@ -68,7 +83,14 @@ export function ChannelPriority({ tenant, onAuthExpired }: ChannelPriorityProps)
           <h2 className="text-2xl font-bold text-slate-900">Channel Priority</h2>
           <p className="text-slate-600">Identity resolution priority for {tenant.name}</p>
         </div>
-        <Button variant="outline" onClick={fetchChannelPriority} disabled={loading} className="flex items-center gap-2">
+        <Button
+          variant="outline"
+          onClick={() => {
+            fetchChannelPriority()
+            trackDetailedUserAction("refresh", "channel_priority", { tenantId: tenant.clientId })
+          }}
+          disabled={loading}
+          className="flex items-center gap-2">
           <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
           Refresh
         </Button>

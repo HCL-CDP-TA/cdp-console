@@ -44,6 +44,14 @@ import {
 } from "lucide-react"
 import { Tenant, User } from "@/types/tenant"
 import { getAuthState, validateAuthState, clearAuthState } from "@/lib/auth"
+import {
+  trackDataManagement,
+  trackError,
+  trackAPICall,
+  trackFormInteraction,
+  trackDetailedUserAction,
+  trackSearchFilter,
+} from "@/lib/analytics"
 
 interface UserManagementProps {
   tenant: Tenant
@@ -98,15 +106,25 @@ export function UserManagement({ tenant, onAuthExpired }: UserManagementProps) {
       if (response.ok) {
         const data = await response.json()
         setUsers(data)
+        trackAPICall(`/api/users/${tenant.clientId}`, "GET", true)
+        trackDetailedUserAction("refresh", "users_management", {
+          userCount: data.length,
+          tenantId: tenant.clientId,
+        })
       } else if (response.status === 401) {
         console.log("Authentication expired - redirecting to login")
+        trackAPICall(`/api/users/${tenant.clientId}`, "GET", false)
+        trackError("authentication_expired", `Failed to fetch users: ${response.statusText}`, "user_management")
         onAuthExpired?.()
         return
       } else {
         console.error("Failed to fetch users:", response.statusText)
+        trackAPICall(`/api/users/${tenant.clientId}`, "GET", false)
+        trackError("api_error", `Failed to fetch users: ${response.statusText}`, "user_management")
       }
     } catch (error) {
       console.error("Error fetching users:", error)
+      trackError("network_error", (error as Error).message, "user_management")
     } finally {
       setLoading(false)
     }
@@ -115,6 +133,8 @@ export function UserManagement({ tenant, onAuthExpired }: UserManagementProps) {
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
+
+    trackFormInteraction("add", "user", "submit")
 
     try {
       const authState = getAuthState()
@@ -136,16 +156,26 @@ export function UserManagement({ tenant, onAuthExpired }: UserManagementProps) {
         await fetchUsers() // Refresh the user list
         setIsAddDialogOpen(false)
         setFormData({ userName: "", recipientEmail: "" }) // Reset form
+        trackAPICall(`/api/users/${tenant.clientId}/create`, "POST", true)
+        trackDetailedUserAction("add", "users_management", {
+          userName: formData.userName,
+          tenantId: tenant.clientId,
+        })
       } else if (response.status === 401) {
         console.log("Authentication expired - redirecting to login")
+        trackAPICall(`/api/users/${tenant.clientId}/create`, "POST", false)
+        trackError("authentication_expired", `Failed to create user: ${response.statusText}`, "user_management")
         onAuthExpired?.()
         return
       } else {
         const errorData = await response.json()
         console.error("Failed to create user:", errorData.error)
+        trackAPICall(`/api/users/${tenant.clientId}/create`, "POST", false)
+        trackError("api_error", `Failed to create user: ${errorData.error}`, "user_management")
       }
     } catch (error) {
       console.error("Error creating user:", error)
+      trackError("network_error", (error as Error).message, "user_management")
     } finally {
       setLoading(false)
     }
@@ -159,11 +189,19 @@ export function UserManagement({ tenant, onAuthExpired }: UserManagementProps) {
       email: user.Email,
     })
     setIsEditDialogOpen(true)
+    trackFormInteraction("edit", "user", "open")
+    trackDetailedUserAction("view", "users_management", {
+      userId: user.id,
+      userEmail: user.Email,
+      tenantId: tenant.clientId,
+    })
   }
 
   const handleUpdateUser = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
+
+    trackFormInteraction("edit", "user", "submit")
 
     try {
       const authState = getAuthState()
@@ -192,16 +230,27 @@ export function UserManagement({ tenant, onAuthExpired }: UserManagementProps) {
         setIsEditDialogOpen(false)
         setEditingUser(null)
         setEditFormData({ firstName: "", lastName: "", email: "" }) // Reset form
+        trackAPICall(`/api/users/${tenant.clientId}/update-profile`, "PUT", true)
+        trackDetailedUserAction("edit", "users_management", {
+          userId: editingUser?.id,
+          userEmail: editFormData.email,
+          tenantId: tenant.clientId,
+        })
       } else if (response.status === 401) {
         console.log("Authentication expired - redirecting to login")
+        trackAPICall(`/api/users/${tenant.clientId}/update-profile`, "PUT", false)
+        trackError("authentication_expired", `Failed to update user: ${response.statusText}`, "user_management")
         onAuthExpired?.()
         return
       } else {
         const errorData = await response.json()
         console.error("Failed to update user profile:", errorData.error)
+        trackAPICall(`/api/users/${tenant.clientId}/update-profile`, "PUT", false)
+        trackError("api_error", `Failed to update user: ${errorData.error}`, "user_management")
       }
     } catch (error) {
       console.error("Error updating user profile:", error)
+      trackError("network_error", (error as Error).message, "user_management")
     } finally {
       setLoading(false)
     }
@@ -213,11 +262,18 @@ export function UserManagement({ tenant, onAuthExpired }: UserManagementProps) {
     // Validate email address
     if (!resetPasswordData.emailAddress.includes("@")) {
       setEmailValidationError("Please enter a valid email address")
+      trackFormInteraction("edit", "user", "error")
       return
     }
 
     setEmailValidationError("")
     setLoading(true)
+
+    trackDetailedUserAction("edit", "users_management", {
+      action: "password_reset",
+      username: resetPasswordData.username,
+      tenantId: tenant.clientId,
+    })
 
     try {
       const authState = getAuthState()
@@ -243,16 +299,22 @@ export function UserManagement({ tenant, onAuthExpired }: UserManagementProps) {
         console.log("Password reset email sent successfully:", data.message)
         setIsResetPasswordDialogOpen(false)
         setResetPasswordData({ username: "", emailAddress: "" }) // Reset form
+        trackAPICall(`/api/users/${tenant.clientId}/reset-password`, "POST", true)
       } else if (response.status === 401) {
         console.log("Authentication expired - redirecting to login")
+        trackAPICall(`/api/users/${tenant.clientId}/reset-password`, "POST", false)
+        trackError("authentication_expired", `Failed to reset password: ${response.statusText}`, "user_management")
         onAuthExpired?.()
         return
       } else {
         const errorData = await response.json()
         console.error("Failed to send password reset email:", errorData.error)
+        trackAPICall(`/api/users/${tenant.clientId}/reset-password`, "POST", false)
+        trackError("api_error", `Failed to reset password: ${errorData.error}`, "user_management")
       }
     } catch (error) {
       console.error("Error sending password reset email:", error)
+      trackError("network_error", (error as Error).message, "user_management")
     } finally {
       setLoading(false)
     }
@@ -260,6 +322,14 @@ export function UserManagement({ tenant, onAuthExpired }: UserManagementProps) {
 
   const handleStatusUpdate = async (user: User, newStatus: boolean) => {
     setLoading(true)
+
+    trackDetailedUserAction("edit", "users_management", {
+      action: "status_update",
+      userId: user.id,
+      userEmail: user.Email,
+      newStatus: newStatus ? "active" : "inactive",
+      tenantId: tenant.clientId,
+    })
 
     try {
       const authState = getAuthState()
@@ -285,16 +355,22 @@ export function UserManagement({ tenant, onAuthExpired }: UserManagementProps) {
         console.log("User status updated successfully:", data.message)
         await fetchUsers() // Refresh the user list
         setStatusUpdateUser(null)
+        trackAPICall(`/api/users/${tenant.clientId}/update-status`, "PUT", true)
       } else if (response.status === 401) {
         console.log("Authentication expired - redirecting to login")
+        trackAPICall(`/api/users/${tenant.clientId}/update-status`, "PUT", false)
+        trackError("authentication_expired", `Failed to update user status: ${response.statusText}`, "user_management")
         onAuthExpired?.()
         return
       } else {
         const errorData = await response.json()
         console.error("Failed to update user status:", errorData.error)
+        trackAPICall(`/api/users/${tenant.clientId}/update-status`, "PUT", false)
+        trackError("api_error", `Failed to update user status: ${errorData.error}`, "user_management")
       }
     } catch (error) {
       console.error("Error updating user status:", error)
+      trackError("network_error", (error as Error).message, "user_management")
     } finally {
       setLoading(false)
     }
@@ -307,6 +383,7 @@ export function UserManagement({ tenant, onAuthExpired }: UserManagementProps) {
       setSortField(field)
       setSortDirection("asc")
     }
+    trackSearchFilter("sort", "users_management", `${field}_${sortDirection === "asc" ? "desc" : "asc"}`)
   }
 
   const getSortIcon = (field: keyof User | "name") => {
@@ -376,11 +453,13 @@ export function UserManagement({ tenant, onAuthExpired }: UserManagementProps) {
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page)
+    trackSearchFilter("paginate", "users_management", `page_${page}`)
   }
 
   const handlePageSizeChange = (newPageSize: string) => {
     setPageSize(parseInt(newPageSize))
     setCurrentPage(1) // Reset to first page when changing page size
+    trackSearchFilter("paginate", "users_management", `page_size_${newPageSize}`)
   }
 
   const formatDate = (dateString: string) => {
@@ -401,13 +480,20 @@ export function UserManagement({ tenant, onAuthExpired }: UserManagementProps) {
           <p className="text-slate-600">Manage users for {tenant.name}</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={fetchUsers} disabled={loading} className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              fetchUsers()
+              trackDetailedUserAction("refresh", "users_management", { tenantId: tenant.clientId })
+            }}
+            disabled={loading}
+            className="flex items-center gap-2">
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             Refresh
           </Button>
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild>
-              <Button className="flex items-center gap-2">
+              <Button className="flex items-center gap-2" onClick={() => trackFormInteraction("add", "user", "open")}>
                 <UserPlus className="h-4 w-4" />
                 Add User
               </Button>
@@ -595,7 +681,12 @@ export function UserManagement({ tenant, onAuthExpired }: UserManagementProps) {
                 <Input
                   placeholder="Search users..."
                   value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
+                  onChange={e => {
+                    setSearchTerm(e.target.value)
+                    if (e.target.value.trim() !== "") {
+                      trackSearchFilter("search", "users_management", e.target.value)
+                    }
+                  }}
                   className="w-64"
                 />
               </div>
