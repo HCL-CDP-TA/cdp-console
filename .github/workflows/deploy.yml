@@ -33,12 +33,12 @@ jobs:
         if: env.NETLIFY_HOOK != ''
         run: |
           echo "🚀 Triggering Netlify deployment..."
-          response=$(curl -s -w "%{http_code}" -X POST -d '{}' "$NETLIFY_HOOK")
-          http_code="${response: -3}"
+          http_code=$(curl -s -o /dev/null -w "%{http_code}" -X POST -d '{}' "$NETLIFY_HOOK")
 
           if [ "$http_code" -eq 200 ] || [ "$http_code" -eq 201 ]; then
             echo "✅ Netlify build triggered successfully (HTTP $http_code)"
           else
             echo "❌ Failed to trigger Netlify build (HTTP $http_code)"
+            echo "🔍 Build hook URL: $NETLIFY_HOOK"
             exit 1
           fi
