@@ -1,8 +1,8 @@
 [build]
   command = "npm run build"
   publish = ".next"
-  # Skip builds except for specific conditions (releases only)
-  ignore = "exit 1"
+  # Only build on releases - ignore all other builds
+  ignore = "git describe --exact-match HEAD || exit 1"
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
@@ -14,6 +14,8 @@
 [context.production]
   command = "npm run build"
   publish = ".next"
+  # Only build on releases (tagged commits)
+  ignore = "git describe --exact-match HEAD || exit 1"
   
 # Deploy previews disabled for all contexts except production
 [context.deploy-preview]
