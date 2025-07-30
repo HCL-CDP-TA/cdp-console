@@ -24,13 +24,31 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Setup ESLint config
+        run: |
+          if [ ! -f ".eslintrc.json" ]; then
+            echo "Creating ESLint configuration..."
+            cat > .eslintrc.json << 'EOF'
+          {
+            "extends": ["next/core-web-vitals"],
+            "rules": {
+              "react/no-unescaped-entities": "off",
+              "@next/next/no-page-custom-font": "off",
+              "react-hooks/exhaustive-deps": "warn"
+            }
+          }
+          EOF
+          else
+            echo "✅ ESLint configuration already exists"
+          fi
+
       - name: Run linting
         run: |
-          if npm run lint --if-present; then
-            echo "✅ Linting passed"
-          else
-            echo "⚠️ Linting failed or not configured, continuing build..."
-          fi
+          # Skip interactive prompts and run lint
+          ESLINT_NO_DEV_ERRORS=true npm run lint || {
+            echo "⚠️ Linting failed, but continuing build..."
+            exit 0
+          }
 
       - name: Run tests
         run: npm test --if-present

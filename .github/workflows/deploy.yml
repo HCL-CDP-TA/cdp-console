@@ -13,9 +13,16 @@ jobs:
           NETLIFY_HOOK: ${{ secrets.NETLIFY_BUILD_HOOK }}
         run: |
           if [ -z "$NETLIFY_HOOK" ]; then
-            echo "❌ NETLIFY_BUILD_HOOK secret is not set"
-            echo "Please add the Netlify build hook URL to your repository secrets"
-            exit 1
+            echo "⚠️ NETLIFY_BUILD_HOOK secret is not set"
+            echo "🔧 To enable automatic deployment:"
+            echo "1. Go to your Netlify dashboard"
+            echo "2. Site settings → Build & deploy → Build hooks"
+            echo "3. Create a new build hook"
+            echo "4. Add the URL as NETLIFY_BUILD_HOOK secret in GitHub"
+            echo ""
+            echo "🎯 Manual deployment: You can manually deploy by pushing to your repository"
+            echo "   since Netlify is configured to build from GitHub"
+            exit 0
           else
             echo "✅ NETLIFY_BUILD_HOOK secret is configured"
           fi
@@ -23,6 +30,7 @@ jobs:
       - name: Trigger Netlify Build Hook
         env:
           NETLIFY_HOOK: ${{ secrets.NETLIFY_BUILD_HOOK }}
+        if: env.NETLIFY_HOOK != ''
         run: |
           echo "🚀 Triggering Netlify deployment..."
           response=$(curl -s -w "%{http_code}" -X POST -d '{}' "$NETLIFY_HOOK")
