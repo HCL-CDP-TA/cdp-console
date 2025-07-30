@@ -53,7 +53,7 @@ interface DataMappingsManagerProps {
   onAuthExpired?: () => void
 }
 
-export function DataMappingsManager({ tenant, onAuthExpired }: DataMappingsManagerProps) {
+export const DataMappingsManager = ({ tenant, onAuthExpired }: DataMappingsManagerProps) => {
   const [mappings, setMappings] = useState<DataMapping[]>([])
   const [userProperties, setUserProperties] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
@@ -485,11 +485,46 @@ export function DataMappingsManager({ tenant, onAuthExpired }: DataMappingsManag
     }
   }
 
+  // Helper function to search within metadata
+  const searchInMetadata = (metadata: string, searchTerm: string): boolean => {
+    if (!metadata || !searchTerm) return false
+    
+    try {
+      const parsed = JSON.parse(metadata)
+      const searchLower = searchTerm.toLowerCase()
+      
+      // Search through all keys and values in the metadata object
+      const searchMetadataRecursively = (obj: any): boolean => {
+        if (typeof obj === 'string') {
+          return obj.toLowerCase().includes(searchLower)
+        }
+        if (typeof obj === 'number' || typeof obj === 'boolean') {
+          return String(obj).toLowerCase().includes(searchLower)
+        }
+        if (Array.isArray(obj)) {
+          return obj.some(item => searchMetadataRecursively(item))
+        }
+        if (typeof obj === 'object' && obj !== null) {
+          return Object.entries(obj).some(([key, value]) => 
+            key.toLowerCase().includes(searchLower) || 
+            searchMetadataRecursively(value)
+          )
+        }
+        return false
+      }
+      
+      return searchMetadataRecursively(parsed)
+    } catch {
+      // If JSON parsing fails, fall back to string search
+      return metadata.toLowerCase().includes(searchTerm.toLowerCase())
+    }
+  }
+
   const filteredMappings = mappings.filter(
     mapping =>
       (mapping.UserProperty?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
       (mapping.ProfileUpdateFunction?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
-      (mapping.Metadata?.toLowerCase() || "").includes(searchTerm.toLowerCase()),
+      searchInMetadata(mapping.Metadata || "", searchTerm),
   )
 
   const totalPages = Math.ceil(filteredMappings.length / pageSize)

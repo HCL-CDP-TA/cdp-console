@@ -52,7 +52,7 @@ interface TenantFormProps {
   onAuthExpired?: () => void
 }
 
-function TenantForm({
+const TenantForm = ({
   formData,
   setFormData,
   onSubmit,
@@ -60,7 +60,7 @@ function TenantForm({
   editingTenant,
   onClientSelect,
   onAuthExpired,
-}: TenantFormProps) {
+}: TenantFormProps) => {
   const [clients, setClients] = useState<Client[]>([])
   const [loadingClients, setLoadingClients] = useState(false)
   const [showClientSelect, setShowClientSelect] = useState(false)
@@ -235,7 +235,7 @@ interface TenantManagerProps {
   onAuthExpired?: () => void
 }
 
-export function TenantManager({
+export const TenantManager = ({
   tenants,
   selectedTenant,
   onAddTenant,
@@ -243,7 +243,7 @@ export function TenantManager({
   onDeleteTenant,
   onSelectTenant,
   onAuthExpired,
-}: TenantManagerProps) {
+}: TenantManagerProps) => {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [editingTenant, setEditingTenant] = useState<Tenant | null>(null)

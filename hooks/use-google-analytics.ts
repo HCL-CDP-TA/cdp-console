@@ -4,7 +4,7 @@ import { useEffect } from "react"
 import { usePathname } from "next/navigation"
 import { pageview } from "@/lib/analytics"
 
-export function useGoogleAnalytics() {
+export const useGoogleAnalytics = () => {
   const pathname = usePathname()
 
   useEffect(() => {

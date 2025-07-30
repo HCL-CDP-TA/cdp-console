@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 
-export async function PUT(
+export const PUT = async (
   request: NextRequest,
   { params }: { params: Promise<{ tenantId: string; dataSource: string }> },
-) {
+) => {
   try {
     const { tenantId } = await params
     const apiKey = request.headers.get("x-api-key")
