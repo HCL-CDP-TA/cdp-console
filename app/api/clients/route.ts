@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 
-export async function GET(request: NextRequest) {
+export const GET = async (request: NextRequest) => {
   try {
     const authHeader = request.headers.get("authorization")
     const adminApiUrl = process.env.ADMIN_API_URL

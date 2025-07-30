@@ -58,7 +58,7 @@ interface UserManagementProps {
   onAuthExpired: () => void
 }
 
-export function UserManagement({ tenant, onAuthExpired }: UserManagementProps) {
+export const UserManagement = ({ tenant, onAuthExpired }: UserManagementProps) => {
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")

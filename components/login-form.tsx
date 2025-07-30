@@ -8,18 +8,16 @@ import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Eye, EyeOff, LogIn, Lock } from "lucide-react"
 import { hashPassword, setAuthState } from "@/lib/auth"
-import { trackAuthentication, trackError } from "@/lib/analytics"
 
 interface LoginFormProps {
   onLoginSuccess: () => void
 }
 
-export function LoginForm({ onLoginSuccess }: LoginFormProps) {
+export const LoginForm = ({ onLoginSuccess }: LoginFormProps) => {
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
-  const [loadingama
-    , setLoading] = useState(false)
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -46,18 +44,12 @@ export function LoginForm({ onLoginSuccess }: LoginFormProps) {
 
       if (response.ok) {
         setAuthState(data.token, username)
-        trackAuthentication("login")
         onLoginSuccess()
       } else {
-        const errorMessage = data.error || "Login failed"
-        setError(errorMessage)
-        trackAuthentication("login_failed")
-        trackError("login_error", errorMessage, "login-form")
+        setError(data.error || "Login failed")
       }
     } catch (error) {
-      const errorMessage = "Network error. Please try again."
-      setError(errorMessage)
-      trackError("network_error", errorMessage, "login-form")
+      setError("Network error. Please try again.")
     } finally {
       setLoading(false)
     }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 
-export async function GET(request: NextRequest, { params }: { params: Promise<{ tenantId: string }> }) {
+export const GET = async (request: NextRequest, { params }: { params: Promise<{ tenantId: string }> }) => {
   try {
     const { tenantId } = await params
     const apiKey = request.headers.get("x-api-key")
@@ -63,7 +63,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 }
 
-export async function POST(request: NextRequest, { params }: { params: Promise<{ tenantId: string }> }) {
+export const POST = async (request: NextRequest, { params }: { params: Promise<{ tenantId: string }> }) => {
   try {
     const { tenantId } = await params
     const apiKey = request.headers.get("x-api-key")

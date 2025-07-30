@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 
-export async function PUT(request: NextRequest, { params }: { params: Promise<{ clientId: string }> }) {
+export const PUT = async (request: NextRequest, { params }: { params: Promise<{ clientId: string }> }) => {
   try {
     const { clientId } = await params
     const authHeader = request.headers.get("authorization")

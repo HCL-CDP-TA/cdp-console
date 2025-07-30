@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 
-export async function PUT(
+export const PUT = async (
   request: NextRequest,
   { params }: { params: Promise<{ tenantId: string; dataSource: string; userProperty: string }> },
-) {
+) => {
   try {
     const { dataSource, userProperty, tenantId } = await params
     const apiKey = request.headers.get("x-api-key")
@@ -42,10 +42,10 @@ export async function PUT(
   }
 }
 
-export async function DELETE(
+export const DELETE = async (
   request: NextRequest,
   { params }: { params: Promise<{ tenantId: string; dataSource: string; userProperty: string }> },
-) {
+) => {
   try {
     const { dataSource, userProperty, tenantId } = await params
     const apiKey = request.headers.get("x-api-key")

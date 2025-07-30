@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { RefreshCw, Layers, Hash, TrendingUp } from "lucide-react"
 import { Tenant } from "@/types/tenant"
-import type { ChannelPriority } from "@/types/tenant"
+import type { ChannelPriority as ChannelPriorityType } from "@/types/tenant"
 import { getAuthState, clearAuthState } from "@/lib/auth"
 import { trackAPICall, trackDetailedUserAction, trackError } from "@/lib/analytics"
 
@@ -16,8 +16,8 @@ interface ChannelPriorityProps {
   onAuthExpired: () => void
 }
 
-export function ChannelPriority({ tenant, onAuthExpired }: ChannelPriorityProps) {
-  const [priorities, setPriorities] = useState<ChannelPriority[]>([])
+export const ChannelPriority = ({ tenant, onAuthExpired }: ChannelPriorityProps) => {
+  const [priorities, setPriorities] = useState<ChannelPriorityType[]>([])
   const [loading, setLoading] = useState(false)
 
   const fetchChannelPriority = async () => {
@@ -39,7 +39,7 @@ export function ChannelPriority({ tenant, onAuthExpired }: ChannelPriorityProps)
       if (response.ok) {
         const data = await response.json()
         // Sort by priority for better display
-        const sortedData = data.sort((a: ChannelPriority, b: ChannelPriority) => a.Priority - b.Priority)
+        const sortedData = data.sort((a: ChannelPriorityType, b: ChannelPriorityType) => a.Priority - b.Priority)
         setPriorities(sortedData)
         trackAPICall(`/api/channel-priority/${tenant.clientId}`, "GET", true)
         trackDetailedUserAction("refresh", "channel_priority", {

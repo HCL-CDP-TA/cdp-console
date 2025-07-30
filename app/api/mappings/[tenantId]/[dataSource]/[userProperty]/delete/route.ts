@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 
-export async function DELETE(
+export const DELETE = async (
   request: NextRequest,
   { params }: { params: Promise<{ tenantId: string; dataSource: string; userProperty: string }> },
-) {
+) => {
   try {
     const { tenantId, dataSource, userProperty } = await params
     const apiKey = request.headers.get("x-api-key")

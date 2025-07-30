@@ -36,7 +36,7 @@ interface DashboardStats {
   mandatoryMappings: number
 }
 
-export function Dashboard({ tenant }: DashboardProps) {
+export const Dashboard = ({ tenant }: DashboardProps) => {
   const [stats, setStats] = useState<DashboardStats>({
     totalProperties: 0,
     totalMappings: { analyze_post: 0, dataingestionpi: 0 },

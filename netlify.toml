@@ -1,9 +1,26 @@
 [build]
   command = "npm run build"
   publish = ".next"
+  # Skip builds except for specific conditions (releases only)
+  ignore = "exit 1"
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
+
+[build.environment]
+  NODE_VERSION = "18"
+
+# Context-specific build settings
+[context.production]
+  command = "npm run build"
+  publish = ".next"
+  
+# Deploy previews disabled for all contexts except production
+[context.deploy-preview]
+  command = "exit 1"
+  
+[context.branch-deploy]
+  command = "exit 1"
 
 [dev]
   command = "npm run dev"

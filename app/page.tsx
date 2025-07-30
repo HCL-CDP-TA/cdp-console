@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import {
   Building2,
   Database,
@@ -14,6 +15,9 @@ import {
   Layers,
   ArrowLeftRight,
   ArrowDown10,
+  ChevronLeft,
+  ChevronRight,
+  Gauge,
 } from "lucide-react"
 import { TenantManager } from "@/components/tenant-manager"
 import { UserPropertiesManager } from "@/components/user-properties-manager"
@@ -23,15 +27,28 @@ import { ChannelPriority } from "@/components/channel-priority"
 import { Dashboard } from "@/components/dashboard"
 import { LoginForm } from "@/components/login-form"
 import { UserManagement } from "@/components/user-management"
+import VersionDisplay from "@/components/version-display"
 import { Tenant } from "@/types/tenant"
 import { getAuthState, clearAuthState } from "@/lib/auth"
 
-export default function Home() {
+const Home = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [authUsername, setAuthUsername] = useState<string | null>(null)
   const [tenants, setTenants] = useState<Tenant[]>([])
   const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null)
   const [activeTab, setActiveTab] = useState("dashboard")
+  const [isCollapsed, setIsCollapsed] = useState(false)
+
+  // Responsive collapse detection
+  useEffect(() => {
+    const checkScreenSize = () => {
+      setIsCollapsed(window.innerWidth < 1024) // Collapse on screens smaller than xl breakpoint
+    }
+
+    checkScreenSize()
+    window.addEventListener("resize", checkScreenSize)
+    return () => window.removeEventListener("resize", checkScreenSize)
+  }, [])
 
   // Wrapper function for tracking navigation
   const handleTabChange = (tab: string) => {
@@ -109,19 +126,78 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex">
       {/* Sidebar */}
-      <div className="w-80 bg-white border-r border-slate-200 shadow-sm flex flex-col">
-        <div className="p-6 border-b border-slate-200">
+      <div
+        className={`${
+          isCollapsed ? "w-16" : "w-80"
+        } bg-white border-r border-slate-200 shadow-sm flex flex-col transition-all duration-300 ease-in-out`}>
+        {/* Header */}
+        <div className={`${isCollapsed ? "p-3" : "p-6"} border-b border-slate-200 transition-all duration-300`}>
           <div className="flex items-center justify-between mb-1">
-            <h1 className="text-2xl font-bold text-slate-900">CDP Console</h1>
-            <Button variant="ghost" size="sm" onClick={handleLogout} className="text-slate-500 hover:text-slate-700">
-              <LogOut className="h-4 w-4" />
-            </Button>
+            {isCollapsed ? (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center justify-center w-full">
+                      <Gauge className="h-6 w-6 text-slate-900" />
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">
+                    <p>CDP Console</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : (
+              <>
+                <div className="flex items-center gap-2">
+                  <Gauge className="h-6 w-6 text-slate-900" />
+                  <h1 className="text-2xl font-bold text-slate-900">CDP Console</h1>
+                </div>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setIsCollapsed(!isCollapsed)}
+                        className="text-slate-500 hover:text-slate-700">
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="left">
+                      <p>Collapse sidebar</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </>
+            )}
           </div>
-          <p className="text-slate-600 text-sm">Welcome, {authUsername}</p>
+          {!isCollapsed && <p className="text-slate-600 text-sm">Welcome, {authUsername}</p>}
+
+          {/* Collapse Toggle for collapsed state */}
+          {isCollapsed && (
+            <div className="mt-2 flex justify-center">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsCollapsed(!isCollapsed)}
+                      className="text-slate-500 hover:text-slate-700">
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">
+                    <p>Expand sidebar</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          )}
         </div>
 
         {/* Tenant List */}
-        {tenants.length > 0 && (
+        {tenants.length > 0 && !isCollapsed && (
           <div className="p-4 border-b border-slate-200">
             <div className="flex items-center justify-between mb-3">
               <h4 className="text-sm font-medium text-slate-700">Tenants ({tenants.length})</h4>
@@ -152,85 +228,196 @@ export default function Home() {
         )}
 
         {/* Navigation */}
-        <nav className="flex-1 p-4">
-          <div className="space-y-1">
-            <button
-              onClick={() => handleTabChange("dashboard")}
-              disabled={!selectedTenant}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                activeTab === "dashboard"
-                  ? "bg-blue-50 text-blue-700 border border-blue-200"
-                  : selectedTenant
-                  ? "text-slate-700 hover:bg-slate-50"
-                  : "text-slate-400 cursor-not-allowed"
-              }`}>
-              <BarChart3 className="h-4 w-4" />
-              Dashboard
-            </button>
-            <button
-              onClick={() => handleTabChange("tenants")}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                activeTab === "tenants"
-                  ? "bg-blue-50 text-blue-700 border border-blue-200"
-                  : "text-slate-700 hover:bg-slate-50"
-              }`}>
-              <Building2 className="h-4 w-4" />
-              Tenant Management
-            </button>
-            <button
-              onClick={() => handleTabChange("properties")}
-              disabled={!selectedTenant}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                activeTab === "properties"
-                  ? "bg-blue-50 text-blue-700 border border-blue-200"
-                  : selectedTenant
-                  ? "text-slate-700 hover:bg-slate-50"
-                  : "text-slate-400 cursor-not-allowed"
-              }`}>
-              <Database className="h-4 w-4" />
-              User Properties
-            </button>
-            <button
-              onClick={() => handleTabChange("mappings")}
-              disabled={!selectedTenant}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                activeTab === "mappings"
-                  ? "bg-blue-50 text-blue-700 border border-blue-200"
-                  : selectedTenant
-                  ? "text-slate-700 hover:bg-slate-50"
-                  : "text-slate-400 cursor-not-allowed"
-              }`}>
-              <ArrowLeftRight className="h-4 w-4" />
-              Data Mappings
-            </button>
-            <button
-              onClick={() => handleTabChange("users")}
-              disabled={!selectedTenant}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                activeTab === "users"
-                  ? "bg-blue-50 text-blue-700 border border-blue-200"
-                  : selectedTenant
-                  ? "text-slate-700 hover:bg-slate-50"
-                  : "text-slate-400 cursor-not-allowed"
-              }`}>
-              <Users className="h-4 w-4" />
-              User Management
-            </button>
-            <button
-              onClick={() => handleTabChange("channel-priority")}
-              disabled={!selectedTenant}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                activeTab === "channel-priority"
-                  ? "bg-blue-50 text-blue-700 border border-blue-200"
-                  : selectedTenant
-                  ? "text-slate-700 hover:bg-slate-50"
-                  : "text-slate-400 cursor-not-allowed"
-              }`}>
-              <ArrowDown10 className="h-4 w-4" />
-              Channel Priority
-            </button>
-          </div>
+        <nav className={`flex-1 ${isCollapsed ? "p-2" : "p-4"} transition-all duration-300`}>
+          <TooltipProvider>
+            <div className="space-y-1">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => handleTabChange("dashboard")}
+                    disabled={!selectedTenant}
+                    className={`w-full flex items-center ${
+                      isCollapsed ? "justify-center px-2 py-3" : "gap-3 px-3 py-2"
+                    } rounded-lg text-sm font-medium transition-colors ${
+                      activeTab === "dashboard"
+                        ? "bg-blue-50 text-blue-700 border border-blue-200"
+                        : selectedTenant
+                        ? "text-slate-700 hover:bg-slate-50"
+                        : "text-slate-400 cursor-not-allowed"
+                    }`}>
+                    <BarChart3 className="h-4 w-4" />
+                    {!isCollapsed && "Dashboard"}
+                  </button>
+                </TooltipTrigger>
+                {isCollapsed && (
+                  <TooltipContent side="right">
+                    <p>Dashboard</p>
+                  </TooltipContent>
+                )}
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => handleTabChange("tenants")}
+                    className={`w-full flex items-center ${
+                      isCollapsed ? "justify-center px-2 py-3" : "gap-3 px-3 py-2"
+                    } rounded-lg text-sm font-medium transition-colors ${
+                      activeTab === "tenants"
+                        ? "bg-blue-50 text-blue-700 border border-blue-200"
+                        : "text-slate-700 hover:bg-slate-50"
+                    }`}>
+                    <Building2 className="h-4 w-4" />
+                    {!isCollapsed && "Tenant Management"}
+                  </button>
+                </TooltipTrigger>
+                {isCollapsed && (
+                  <TooltipContent side="right">
+                    <p>Tenant Management</p>
+                  </TooltipContent>
+                )}
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => handleTabChange("properties")}
+                    disabled={!selectedTenant}
+                    className={`w-full flex items-center ${
+                      isCollapsed ? "justify-center px-2 py-3" : "gap-3 px-3 py-2"
+                    } rounded-lg text-sm font-medium transition-colors ${
+                      activeTab === "properties"
+                        ? "bg-blue-50 text-blue-700 border border-blue-200"
+                        : selectedTenant
+                        ? "text-slate-700 hover:bg-slate-50"
+                        : "text-slate-400 cursor-not-allowed"
+                    }`}>
+                    <Database className="h-4 w-4" />
+                    {!isCollapsed && "User Properties"}
+                  </button>
+                </TooltipTrigger>
+                {isCollapsed && (
+                  <TooltipContent side="right">
+                    <p>User Properties</p>
+                  </TooltipContent>
+                )}
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => handleTabChange("mappings")}
+                    disabled={!selectedTenant}
+                    className={`w-full flex items-center ${
+                      isCollapsed ? "justify-center px-2 py-3" : "gap-3 px-3 py-2"
+                    } rounded-lg text-sm font-medium transition-colors ${
+                      activeTab === "mappings"
+                        ? "bg-blue-50 text-blue-700 border border-blue-200"
+                        : selectedTenant
+                        ? "text-slate-700 hover:bg-slate-50"
+                        : "text-slate-400 cursor-not-allowed"
+                    }`}>
+                    <ArrowLeftRight className="h-4 w-4" />
+                    {!isCollapsed && "Data Mappings"}
+                  </button>
+                </TooltipTrigger>
+                {isCollapsed && (
+                  <TooltipContent side="right">
+                    <p>Data Mappings</p>
+                  </TooltipContent>
+                )}
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => handleTabChange("users")}
+                    disabled={!selectedTenant}
+                    className={`w-full flex items-center ${
+                      isCollapsed ? "justify-center px-2 py-3" : "gap-3 px-3 py-2"
+                    } rounded-lg text-sm font-medium transition-colors ${
+                      activeTab === "users"
+                        ? "bg-blue-50 text-blue-700 border border-blue-200"
+                        : selectedTenant
+                        ? "text-slate-700 hover:bg-slate-50"
+                        : "text-slate-400 cursor-not-allowed"
+                    }`}>
+                    <Users className="h-4 w-4" />
+                    {!isCollapsed && "User Management"}
+                  </button>
+                </TooltipTrigger>
+                {isCollapsed && (
+                  <TooltipContent side="right">
+                    <p>User Management</p>
+                  </TooltipContent>
+                )}
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => handleTabChange("channel-priority")}
+                    disabled={!selectedTenant}
+                    className={`w-full flex items-center ${
+                      isCollapsed ? "justify-center px-2 py-3" : "gap-3 px-3 py-2"
+                    } rounded-lg text-sm font-medium transition-colors ${
+                      activeTab === "channel-priority"
+                        ? "bg-blue-50 text-blue-700 border border-blue-200"
+                        : selectedTenant
+                        ? "text-slate-700 hover:bg-slate-50"
+                        : "text-slate-400 cursor-not-allowed"
+                    }`}>
+                    <ArrowDown10 className="h-4 w-4" />
+                    {!isCollapsed && "Channel Priority"}
+                  </button>
+                </TooltipTrigger>
+                {isCollapsed && (
+                  <TooltipContent side="right">
+                    <p>Channel Priority</p>
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </div>
+          </TooltipProvider>
         </nav>
+
+        {/* Footer with Logout and Version */}
+        <div
+          className={`${isCollapsed ? "p-2" : "p-4"} border-t border-slate-200 space-y-2 transition-all duration-300`}>
+          {isCollapsed ? (
+            <TooltipProvider>
+              <div className="space-y-2">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleLogout}
+                      className="w-full flex items-center justify-center text-slate-500 hover:text-slate-700">
+                      <LogOut className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">
+                    <p>Logout</p>
+                  </TooltipContent>
+                </Tooltip>
+                <VersionDisplay isCollapsed={isCollapsed} />
+              </div>
+            </TooltipProvider>
+          ) : (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleLogout}
+                className="w-full flex items-center gap-2 text-slate-500 hover:text-slate-700 justify-start px-3 py-2">
+                <LogOut className="h-4 w-4" />
+                Logout
+              </Button>
+              <VersionDisplay isCollapsed={isCollapsed} />
+            </>
+          )}
+        </div>
       </div>
 
       {/* Main Content */}
@@ -364,3 +551,5 @@ export default function Home() {
     </div>
   )
 }
+
+export default Home

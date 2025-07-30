@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 
-export async function GET(
+export const GET = async (
   request: NextRequest,
   { params }: { params: Promise<{ tenantId: string; dataSource: string }> },
-) {
+) => {
   try {
     const { dataSource, tenantId } = await params
     const apiKey = request.headers.get("x-api-key")
@@ -61,10 +61,10 @@ export async function GET(
   }
 }
 
-export async function POST(
+export const POST = async (
   request: NextRequest,
   { params }: { params: Promise<{ tenantId: string; dataSource: string }> },
-) {
+) => {
   try {
     const { dataSource, tenantId } = await params
     const apiKey = request.headers.get("x-api-key")

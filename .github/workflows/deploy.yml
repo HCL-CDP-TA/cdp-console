@@ -1,0 +1,13 @@
+name: Deploy to Netlify on Release
+
+on:
+  release:
+    types: [published] # Only when a release is published
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Netlify Build Hook
+        run: |
+          curl -X POST -d '{}' ${{ secrets.NETLIFY_BUILD_HOOK }}

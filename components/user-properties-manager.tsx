@@ -47,7 +47,7 @@ interface UserPropertiesManagerProps {
   onAuthExpired?: () => void
 }
 
-export function UserPropertiesManager({ tenant, onAuthExpired }: UserPropertiesManagerProps) {
+export const UserPropertiesManager = ({ tenant, onAuthExpired }: UserPropertiesManagerProps) => {
   const [properties, setProperties] = useState<UserProperty[]>([])
   const [loading, setLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
@@ -65,7 +65,8 @@ export function UserPropertiesManager({ tenant, onAuthExpired }: UserPropertiesM
     priority: 1,
   })
 
-  const dataTypes = ["STRING", "NUMBER", "BOOLEAN", "JSONOBJ", "JSONARR"]
+  // const dataTypes = ["STRING", "NUMBER", "BOOLEAN", "JSONOBJ", "JSONARR"]
+  const dataTypes = ["STRING", "JSONARR"]
   const preferences = ["pri", "sec", "none"]
 
   const getPreferenceBadgeVariant = (preference: string) => {
