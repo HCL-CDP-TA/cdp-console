@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
@@ -48,7 +48,7 @@ export const Dashboard = ({ tenant }: DashboardProps) => {
   const [loading, setLoading] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = useCallback(async () => {
     if (!tenant) return
 
     setLoading(true)
@@ -133,11 +133,11 @@ export const Dashboard = ({ tenant }: DashboardProps) => {
     } finally {
       setLoading(false)
     }
-  }
+  }, [tenant])
 
   useEffect(() => {
     fetchDashboardData()
-  }, [tenant])
+  }, [fetchDashboardData])
 
   if (!tenant) {
     return (

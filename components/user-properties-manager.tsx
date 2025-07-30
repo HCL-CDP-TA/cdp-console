@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -106,7 +106,7 @@ export const UserPropertiesManager = ({ tenant, onAuthExpired }: UserPropertiesM
     await callback()
   }
 
-  const fetchProperties = async () => {
+  const fetchProperties = useCallback(async () => {
     setLoading(true)
     setErrorMessage(null) // Clear any previous errors
     try {
@@ -141,11 +141,11 @@ export const UserPropertiesManager = ({ tenant, onAuthExpired }: UserPropertiesM
     } finally {
       setLoading(false)
     }
-  }
+  }, [tenant.clientId, tenant.apiKey, tenant.apiEndpoint])
 
   useEffect(() => {
     fetchProperties()
-  }, [tenant])
+  }, [fetchProperties])
 
   const resetForm = () => {
     setFormData({

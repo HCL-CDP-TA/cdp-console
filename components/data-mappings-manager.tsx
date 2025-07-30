@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -94,39 +94,42 @@ export const DataMappingsManager = ({ tenant, onAuthExpired }: DataMappingsManag
     return dataSource === "dataingestionpi" ? "dataingestionapi" : dataSource
   }
 
-  const fetchMappings = async (dataSource: DataSource) => {
-    setLoading(true)
-    const apiDataSource = getApiDataSource(dataSource)
-    try {
-      const response = await fetch(`/api/mappings/${tenant.clientId}/${apiDataSource}`, {
-        headers: {
-          "x-api-key": tenant.apiKey,
-          "x-api-endpoint": tenant.apiEndpoint,
-          "Content-Type": "application/json",
-        },
-      })
+  const fetchMappings = useCallback(
+    async (dataSource: DataSource) => {
+      setLoading(true)
+      const apiDataSource = getApiDataSource(dataSource)
+      try {
+        const response = await fetch(`/api/mappings/${tenant.clientId}/${apiDataSource}`, {
+          headers: {
+            "x-api-key": tenant.apiKey,
+            "x-api-endpoint": tenant.apiEndpoint,
+            "Content-Type": "application/json",
+          },
+        })
 
-      if (response.ok) {
-        const data = await response.json()
-        setMappings(data)
-        trackAPICall(`/api/mappings/${tenant.clientId}/${apiDataSource}`, "GET", true)
-      } else {
-        console.error("Failed to fetch mappings:", response.statusText)
+        if (response.ok) {
+          const data = await response.json()
+          setMappings(data)
+          trackAPICall(`/api/mappings/${tenant.clientId}/${apiDataSource}`, "GET", true)
+        } else {
+          console.error("Failed to fetch mappings:", response.statusText)
+          setMappings([])
+          trackAPICall(`/api/mappings/${tenant.clientId}/${apiDataSource}`, "GET", false)
+          trackError("api_error", `Failed to fetch mappings: ${response.statusText}`, "data-mappings-manager")
+        }
+      } catch (error) {
+        console.error("Error fetching mappings:", error)
         setMappings([])
         trackAPICall(`/api/mappings/${tenant.clientId}/${apiDataSource}`, "GET", false)
-        trackError("api_error", `Failed to fetch mappings: ${response.statusText}`, "data-mappings-manager")
+        trackError("network_error", `Error fetching mappings: ${error}`, "data-mappings-manager")
+      } finally {
+        setLoading(false)
       }
-    } catch (error) {
-      console.error("Error fetching mappings:", error)
-      setMappings([])
-      trackAPICall(`/api/mappings/${tenant.clientId}/${apiDataSource}`, "GET", false)
-      trackError("network_error", `Error fetching mappings: ${error}`, "data-mappings-manager")
-    } finally {
-      setLoading(false)
-    }
-  }
+    },
+    [tenant.clientId, tenant.apiKey, tenant.apiEndpoint],
+  )
 
-  const fetchUserProperties = async () => {
+  const fetchUserProperties = useCallback(async () => {
     setLoadingProperties(true)
     try {
       const response = await fetch(`/api/user-properties/${tenant.clientId}`, {
@@ -154,15 +157,15 @@ export const DataMappingsManager = ({ tenant, onAuthExpired }: DataMappingsManag
     } finally {
       setLoadingProperties(false)
     }
-  }
+  }, [tenant.clientId, tenant.apiKey, tenant.apiEndpoint])
 
   useEffect(() => {
     fetchMappings(selectedDataSource)
-  }, [tenant, selectedDataSource])
+  }, [fetchMappings, selectedDataSource])
 
   useEffect(() => {
     fetchUserProperties()
-  }, [tenant])
+  }, [fetchUserProperties])
 
   const resetForm = () => {
     setFormData({
@@ -488,31 +491,30 @@ export const DataMappingsManager = ({ tenant, onAuthExpired }: DataMappingsManag
   // Helper function to search within metadata
   const searchInMetadata = (metadata: string, searchTerm: string): boolean => {
     if (!metadata || !searchTerm) return false
-    
+
     try {
       const parsed = JSON.parse(metadata)
       const searchLower = searchTerm.toLowerCase()
-      
+
       // Search through all keys and values in the metadata object
       const searchMetadataRecursively = (obj: any): boolean => {
-        if (typeof obj === 'string') {
+        if (typeof obj === "string") {
           return obj.toLowerCase().includes(searchLower)
         }
-        if (typeof obj === 'number' || typeof obj === 'boolean') {
+        if (typeof obj === "number" || typeof obj === "boolean") {
           return String(obj).toLowerCase().includes(searchLower)
         }
         if (Array.isArray(obj)) {
           return obj.some(item => searchMetadataRecursively(item))
         }
-        if (typeof obj === 'object' && obj !== null) {
-          return Object.entries(obj).some(([key, value]) => 
-            key.toLowerCase().includes(searchLower) || 
-            searchMetadataRecursively(value)
+        if (typeof obj === "object" && obj !== null) {
+          return Object.entries(obj).some(
+            ([key, value]) => key.toLowerCase().includes(searchLower) || searchMetadataRecursively(value),
           )
         }
         return false
       }
-      
+
       return searchMetadataRecursively(parsed)
     } catch {
       // If JSON parsing fails, fall back to string search

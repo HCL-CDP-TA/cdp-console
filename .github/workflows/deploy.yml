@@ -8,6 +8,29 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger Netlify Build Hook
+      - name: Check for Netlify Build Hook
+        env:
+          NETLIFY_HOOK: ${{ secrets.NETLIFY_BUILD_HOOK }}
         run: |
-          curl -X POST -d '{}' ${{ secrets.NETLIFY_BUILD_HOOK }}
+          if [ -z "$NETLIFY_HOOK" ]; then
+            echo "❌ NETLIFY_BUILD_HOOK secret is not set"
+            echo "Please add the Netlify build hook URL to your repository secrets"
+            exit 1
+          else
+            echo "✅ NETLIFY_BUILD_HOOK secret is configured"
+          fi
+
+      - name: Trigger Netlify Build Hook
+        env:
+          NETLIFY_HOOK: ${{ secrets.NETLIFY_BUILD_HOOK }}
+        run: |
+          echo "🚀 Triggering Netlify deployment..."
+          response=$(curl -s -w "%{http_code}" -X POST -d '{}' "$NETLIFY_HOOK")
+          http_code="${response: -3}"
+
+          if [ "$http_code" -eq 200 ] || [ "$http_code" -eq 201 ]; then
+            echo "✅ Netlify build triggered successfully (HTTP $http_code)"
+          else
+            echo "❌ Failed to trigger Netlify build (HTTP $http_code)"
+            exit 1
+          fi

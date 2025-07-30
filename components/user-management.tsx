@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -87,7 +87,7 @@ export const UserManagement = ({ tenant, onAuthExpired }: UserManagementProps) =
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
 
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     setLoading(true)
     try {
       const authState = getAuthState()
@@ -128,7 +128,7 @@ export const UserManagement = ({ tenant, onAuthExpired }: UserManagementProps) =
     } finally {
       setLoading(false)
     }
-  }
+  }, [tenant.clientId, onAuthExpired])
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -393,7 +393,7 @@ export const UserManagement = ({ tenant, onAuthExpired }: UserManagementProps) =
 
   useEffect(() => {
     fetchUsers()
-  }, [tenant])
+  }, [fetchUsers])
 
   const filteredUsers = users
     .filter(

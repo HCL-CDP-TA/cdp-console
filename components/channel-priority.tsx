@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -20,7 +20,7 @@ export const ChannelPriority = ({ tenant, onAuthExpired }: ChannelPriorityProps)
   const [priorities, setPriorities] = useState<ChannelPriorityType[]>([])
   const [loading, setLoading] = useState(false)
 
-  const fetchChannelPriority = async () => {
+  const fetchChannelPriority = useCallback(async () => {
     setLoading(true)
     try {
       const authState = getAuthState()
@@ -70,11 +70,11 @@ export const ChannelPriority = ({ tenant, onAuthExpired }: ChannelPriorityProps)
     } finally {
       setLoading(false)
     }
-  }
+  }, [tenant.clientId, onAuthExpired])
 
   useEffect(() => {
     fetchChannelPriority()
-  }, [tenant])
+  }, [fetchChannelPriority])
 
   return (
     <div className="space-y-6">
