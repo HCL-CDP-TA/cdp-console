@@ -287,7 +287,7 @@ export const UserPropertiesManager = ({ tenant, onAuthExpired }: UserPropertiesM
 
   const filteredProperties = properties.filter(
     property =>
-      property.userProperty?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      property.dmpDataPointCode?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       property.dataType?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       property.preference?.toLowerCase().includes(searchTerm.toLowerCase()),
   )
