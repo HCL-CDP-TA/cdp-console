@@ -1,11 +1,20 @@
 export interface Tenant {
   id: string
   name: string
-  apiKey: string
+  displayName: string
   clientId: string
+  apiKey: string
   apiEndpoint: string
+  isFavorite?: boolean
   createdAt: string
   updatedAt: string
+}
+
+export interface TenantSettings {
+  apiKey: string
+  apiEndpoint: string
+  selectedTenantId?: string
+  favoriteTenants: string[]
 }
 
 export interface UserProperty {

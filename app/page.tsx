@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -18,8 +18,10 @@ import {
   ChevronLeft,
   ChevronRight,
   Gauge,
+  Star,
 } from "lucide-react"
 import { TenantManager } from "@/components/tenant-manager"
+import { TenantSelector } from "@/components/tenant-selector"
 import { UserPropertiesManager } from "@/components/user-properties-manager"
 import { DataMappingsManager } from "@/components/data-mappings-manager"
 import { trackNavigation, trackTenantSelection, trackAuthentication } from "@/lib/analytics"
@@ -28,16 +30,22 @@ import { Dashboard } from "@/components/dashboard"
 import { LoginForm } from "@/components/login-form"
 import { UserManagement } from "@/components/user-management"
 import VersionDisplay from "@/components/version-display"
-import { Tenant } from "@/types/tenant"
+import { Tenant, TenantSettings, Client } from "@/types/tenant"
 import { getAuthState, clearAuthState } from "@/lib/auth"
 
 const Home = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [authUsername, setAuthUsername] = useState<string | null>(null)
-  const [tenants, setTenants] = useState<Tenant[]>([])
   const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null)
-  const [activeTab, setActiveTab] = useState("dashboard")
+  const [activeTab, setActiveTab] = useState("user-properties")
   const [isCollapsed, setIsCollapsed] = useState(false)
+  const [showTenantSelector, setShowTenantSelector] = useState(false)
+  const [favoriteClients, setFavoriteClients] = useState<Client[]>([])
+  const [tenantSettings, setTenantSettings] = useState<TenantSettings>({
+    apiKey: "",
+    apiEndpoint: "",
+    favoriteTenants: [],
+  })
 
   // Responsive collapse detection
   useEffect(() => {
@@ -50,6 +58,24 @@ const Home = () => {
     return () => window.removeEventListener("resize", checkScreenSize)
   }, [])
 
+  // Load tenant settings and check for saved tenant
+  useEffect(() => {
+    const savedSettings = localStorage.getItem("cdp-tenant-settings")
+    if (savedSettings) {
+      try {
+        const settings = JSON.parse(savedSettings)
+        setTenantSettings(settings)
+
+        // If there's a selectedTenantId but no current tenant, show selector
+        if (settings.selectedTenantId && !selectedTenant) {
+          setShowTenantSelector(true)
+        }
+      } catch (e) {
+        console.error("Failed to parse tenant settings:", e)
+      }
+    }
+  }, [selectedTenant])
+
   // Wrapper function for tracking navigation
   const handleTabChange = (tab: string) => {
     setActiveTab(tab)
@@ -59,6 +85,8 @@ const Home = () => {
   // Wrapper function for tracking tenant selection
   const handleTenantSelection = (tenant: Tenant) => {
     setSelectedTenant(tenant)
+    setShowTenantSelector(false)
+    setActiveTab("user-properties") // Set User Properties as default when tenant is selected
     trackTenantSelection(tenant.clientId, tenant.name)
   }
 
@@ -67,20 +95,17 @@ const Home = () => {
     setIsAuthenticated(authState.isAuthenticated)
     setAuthUsername(authState.username)
 
-    const storedTenants = localStorage.getItem("cdp-tenants")
-    if (storedTenants) {
-      const parsedTenants = JSON.parse(storedTenants)
-      setTenants(parsedTenants)
-      if (parsedTenants.length > 0) {
-        setSelectedTenant(parsedTenants[0])
-      }
+    // If authenticated but no tenant selected, show tenant selector
+    if (authState.isAuthenticated && !selectedTenant) {
+      setShowTenantSelector(true)
     }
-  }, [])
+  }, [selectedTenant])
 
   const handleLoginSuccess = () => {
     const authState = getAuthState()
     setIsAuthenticated(true)
     setAuthUsername(authState.username)
+    setShowTenantSelector(true) // Show tenant selector after login
   }
 
   const handleLogout = () => {
@@ -88,39 +113,85 @@ const Home = () => {
     clearAuthState()
     setIsAuthenticated(false)
     setAuthUsername(null)
+    setSelectedTenant(null)
+    setShowTenantSelector(false)
   }
 
-  const saveTenants = (updatedTenants: Tenant[]) => {
-    setTenants(updatedTenants)
-    localStorage.setItem("cdp-tenants", JSON.stringify(updatedTenants))
+  const handleManageTenants = () => {
+    setShowTenantSelector(false)
+    setActiveTab("tenants")
   }
 
-  const addTenant = (tenant: Tenant) => {
-    const updatedTenants = [...tenants, tenant]
-    saveTenants(updatedTenants)
-    if (!selectedTenant) {
-      setSelectedTenant(tenant)
+  const handleBackToTenantSelector = () => {
+    setSelectedTenant(null)
+    setShowTenantSelector(true)
+  }
+
+  const favoriteTenants = tenantSettings.favoriteTenants || []
+
+  // Fetch favorite clients when tenantSettings change
+  const fetchFavoriteClients = useCallback(async () => {
+    if (!tenantSettings.apiKey || !tenantSettings.apiEndpoint || favoriteTenants.length === 0) {
+      setFavoriteClients([])
+      return
     }
-  }
 
-  const updateTenant = (updatedTenant: Tenant) => {
-    const updatedTenants = tenants.map(t => (t.id === updatedTenant.id ? updatedTenant : t))
-    saveTenants(updatedTenants)
-    if (selectedTenant?.id === updatedTenant.id) {
-      setSelectedTenant(updatedTenant)
-    }
-  }
+    try {
+      const authState = getAuthState()
+      if (!authState.token) {
+        return
+      }
 
-  const deleteTenant = (tenantId: string) => {
-    const updatedTenants = tenants.filter(t => t.id !== tenantId)
-    saveTenants(updatedTenants)
-    if (selectedTenant?.id === tenantId) {
-      setSelectedTenant(updatedTenants[0] || null)
+      const response = await fetch("/api/clients", {
+        headers: {
+          Authorization: `Bearer ${authState.token}`,
+          "Content-Type": "application/json",
+        },
+      })
+
+      if (response.ok) {
+        const allClients = await response.json()
+        const favorites = allClients.filter((client: Client) => favoriteTenants.includes(client.id.toString()))
+        setFavoriteClients(favorites)
+      }
+    } catch (error) {
+      console.error("Error fetching favorite clients:", error)
     }
+  }, [tenantSettings.apiKey, tenantSettings.apiEndpoint, favoriteTenants])
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchFavoriteClients()
+    }
+  }, [fetchFavoriteClients, isAuthenticated])
+
+  const handleFavoriteTenantSelect = (client: Client) => {
+    const tenant: Tenant = {
+      id: client.id.toString(),
+      name: client.Name,
+      displayName: client.DisplayName,
+      clientId: client.id.toString(),
+      apiKey: tenantSettings.apiKey,
+      apiEndpoint: tenantSettings.apiEndpoint,
+      isFavorite: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+
+    // Save selected tenant to localStorage
+    const updatedSettings = { ...tenantSettings, selectedTenantId: client.id.toString() }
+    setTenantSettings(updatedSettings)
+    localStorage.setItem("cdp-tenant-settings", JSON.stringify(updatedSettings))
+
+    handleTenantSelection(tenant)
   }
 
   if (!isAuthenticated) {
     return <LoginForm onLoginSuccess={handleLoginSuccess} />
+  }
+
+  if (showTenantSelector) {
+    return <TenantSelector onTenantSelected={handleTenantSelection} onManageTenants={handleManageTenants} />
   }
 
   return (
@@ -196,34 +267,57 @@ const Home = () => {
           )}
         </div>
 
-        {/* Tenant List */}
-        {tenants.length > 0 && !isCollapsed && (
+        {/* Current Tenant & Favorites */}
+        {!isCollapsed && (
           <div className="p-4 border-b border-slate-200">
-            <div className="flex items-center justify-between mb-3">
-              <h4 className="text-sm font-medium text-slate-700">Tenants ({tenants.length})</h4>
-              <Button variant="ghost" size="sm" onClick={() => handleTabChange("tenants")} className="h-6 px-2 text-xs">
-                <Settings className="h-3 w-3 mr-1" />
-                Manage
-              </Button>
-            </div>
-            <div className="space-y-1 max-h-32 overflow-y-auto">
-              {tenants.map(tenant => (
-                <button
-                  key={tenant.id}
-                  onClick={() => handleTenantSelection(tenant)}
-                  className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
-                    selectedTenant?.id === tenant.id
-                      ? "bg-blue-50 text-blue-700 border border-blue-200"
-                      : "text-slate-600 hover:bg-slate-50"
-                  }`}>
-                  <div className="flex items-center gap-2 mb-1">
-                    <Building2 className="h-4 w-4 flex-shrink-0" />
-                    <span className="font-medium truncate">{tenant.name}</span>
+            {/* Current Tenant Info */}
+            {selectedTenant && (
+              <div className="mb-4">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-sm font-medium text-slate-700">Current Tenant</h4>
+                  <Button variant="ghost" size="sm" onClick={handleBackToTenantSelector} className="h-6 px-2 text-xs">
+                    Switch
+                  </Button>
+                </div>
+                <div className="text-xs text-slate-500 mb-2">
+                  {selectedTenant.displayName} (ID: {selectedTenant.clientId})
+                </div>
+              </div>
+            )}
+
+            {/* Favorites List */}
+            {favoriteClients.length > 0 && (
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Star className="h-4 w-4 text-yellow-500 fill-current" />
+                    <h4 className="text-sm font-medium text-slate-700">Favorites ({favoriteClients.length})</h4>
                   </div>
-                  <div className="text-xs text-slate-500 truncate pl-6">{tenant.clientId}</div>
-                </button>
-              ))}
-            </div>
+                  <Button variant="ghost" size="sm" onClick={handleBackToTenantSelector} className="h-6 px-2 text-xs">
+                    View All
+                  </Button>
+                </div>
+                <div className="space-y-1 max-h-32 overflow-y-auto">
+                  {favoriteClients.map(client => (
+                    <button
+                      key={client.id}
+                      onClick={() => handleFavoriteTenantSelect(client)}
+                      className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                        selectedTenant?.clientId === client.id.toString()
+                          ? "bg-blue-50 text-blue-700 border border-blue-200"
+                          : "text-slate-600 hover:bg-slate-50"
+                      }`}>
+                      <div className="flex items-center gap-2 mb-1">
+                        <Building2 className="h-4 w-4 flex-shrink-0" />
+                        <span className="font-medium truncate">{client.DisplayName}</span>
+                        <Star className="h-3 w-3 text-yellow-500 fill-current flex-shrink-0" />
+                      </div>
+                      <div className="text-xs text-slate-500 truncate pl-6">{client.id}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -234,59 +328,12 @@ const Home = () => {
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
-                    onClick={() => handleTabChange("dashboard")}
+                    onClick={() => handleTabChange("user-properties")}
                     disabled={!selectedTenant}
                     className={`w-full flex items-center ${
                       isCollapsed ? "justify-center px-2 py-3" : "gap-3 px-3 py-2"
                     } rounded-lg text-sm font-medium transition-colors ${
-                      activeTab === "dashboard"
-                        ? "bg-blue-50 text-blue-700 border border-blue-200"
-                        : selectedTenant
-                        ? "text-slate-700 hover:bg-slate-50"
-                        : "text-slate-400 cursor-not-allowed"
-                    }`}>
-                    <BarChart3 className="h-4 w-4" />
-                    {!isCollapsed && "Dashboard"}
-                  </button>
-                </TooltipTrigger>
-                {isCollapsed && (
-                  <TooltipContent side="right">
-                    <p>Dashboard</p>
-                  </TooltipContent>
-                )}
-              </Tooltip>
-
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    onClick={() => handleTabChange("tenants")}
-                    className={`w-full flex items-center ${
-                      isCollapsed ? "justify-center px-2 py-3" : "gap-3 px-3 py-2"
-                    } rounded-lg text-sm font-medium transition-colors ${
-                      activeTab === "tenants"
-                        ? "bg-blue-50 text-blue-700 border border-blue-200"
-                        : "text-slate-700 hover:bg-slate-50"
-                    }`}>
-                    <Building2 className="h-4 w-4" />
-                    {!isCollapsed && "Tenant Management"}
-                  </button>
-                </TooltipTrigger>
-                {isCollapsed && (
-                  <TooltipContent side="right">
-                    <p>Tenant Management</p>
-                  </TooltipContent>
-                )}
-              </Tooltip>
-
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    onClick={() => handleTabChange("properties")}
-                    disabled={!selectedTenant}
-                    className={`w-full flex items-center ${
-                      isCollapsed ? "justify-center px-2 py-3" : "gap-3 px-3 py-2"
-                    } rounded-lg text-sm font-medium transition-colors ${
-                      activeTab === "properties"
+                      activeTab === "user-properties"
                         ? "bg-blue-50 text-blue-700 border border-blue-200"
                         : selectedTenant
                         ? "text-slate-700 hover:bg-slate-50"
@@ -356,6 +403,29 @@ const Home = () => {
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
+                    onClick={() => handleTabChange("tenants")}
+                    className={`w-full flex items-center ${
+                      isCollapsed ? "justify-center px-2 py-3" : "gap-3 px-3 py-2"
+                    } rounded-lg text-sm font-medium transition-colors ${
+                      activeTab === "tenants"
+                        ? "bg-blue-50 text-blue-700 border border-blue-200"
+                        : "text-slate-700 hover:bg-slate-50"
+                    }`}>
+                    <Building2 className="h-4 w-4" />
+                    {!isCollapsed && "Tenant Management"}
+                  </button>
+                </TooltipTrigger>
+                {isCollapsed && (
+                  <TooltipContent side="right">
+                    <p>Tenant Management</p>
+                  </TooltipContent>
+                )}
+              </Tooltip>
+
+              {/* Channel Priority - Hidden for now, may come back to this later */}
+              {/* <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
                     onClick={() => handleTabChange("channel-priority")}
                     disabled={!selectedTenant}
                     className={`w-full flex items-center ${
@@ -376,7 +446,7 @@ const Home = () => {
                     <p>Channel Priority</p>
                   </TooltipContent>
                 )}
-              </Tooltip>
+              </Tooltip> */}
             </div>
           </TooltipProvider>
         </nav>
@@ -423,7 +493,8 @@ const Home = () => {
       {/* Main Content */}
       <div className="flex-1 overflow-auto">
         <div className="p-8">
-          {activeTab === "dashboard" && (
+          {/* Dashboard - Hidden for now */}
+          {/* {activeTab === "dashboard" && (
             <>
               {selectedTenant ? (
                 <Dashboard tenant={selectedTenant} />
@@ -433,21 +504,33 @@ const Home = () => {
                     <BarChart3 className="h-12 w-12 text-slate-400 mx-auto mb-4" />
                     <h3 className="text-lg font-semibold text-slate-900 mb-2">No Tenant Selected</h3>
                     <p className="text-slate-600 mb-4">Please select a tenant to view dashboard metrics</p>
-                    <Button onClick={() => handleTabChange("tenants")}>Select Tenant</Button>
+                    <Button onClick={handleBackToTenantSelector}>Select Tenant</Button>
                   </CardContent>
                 </Card>
               )}
             </>
-          )}
+          )} */}
 
           {activeTab === "tenants" && (
             <TenantManager
-              tenants={tenants}
-              selectedTenant={selectedTenant}
-              onAddTenant={addTenant}
-              onUpdateTenant={updateTenant}
-              onDeleteTenant={deleteTenant}
-              onSelectTenant={setSelectedTenant}
+              onTenantSelected={tenant => {
+                handleTenantSelection(tenant)
+                setActiveTab("user-properties") // Go back to user properties after selecting
+              }}
+              onSettingsUpdated={() => {
+                // Reload tenant settings
+                const savedSettings = localStorage.getItem("cdp-tenant-settings")
+                if (savedSettings) {
+                  try {
+                    const settings = JSON.parse(savedSettings)
+                    setTenantSettings(settings)
+                    // Refresh favorites when settings change
+                    fetchFavoriteClients()
+                  } catch (e) {
+                    console.error("Failed to parse tenant settings:", e)
+                  }
+                }
+              }}
               onAuthExpired={() => {
                 setIsAuthenticated(false)
                 setAuthUsername(null)
@@ -455,7 +538,7 @@ const Home = () => {
             />
           )}
 
-          {activeTab === "properties" && (
+          {activeTab === "user-properties" && (
             <>
               {selectedTenant ? (
                 <UserPropertiesManager
@@ -471,7 +554,7 @@ const Home = () => {
                     <Database className="h-12 w-12 text-slate-400 mx-auto mb-4" />
                     <h3 className="text-lg font-semibold text-slate-900 mb-2">No Tenant Selected</h3>
                     <p className="text-slate-600 mb-4">Please select a tenant to manage user properties</p>
-                    <Button onClick={() => handleTabChange("tenants")}>Select Tenant</Button>
+                    <Button onClick={handleBackToTenantSelector}>Select Tenant</Button>
                   </CardContent>
                 </Card>
               )}
@@ -494,7 +577,7 @@ const Home = () => {
                     <MapPin className="h-12 w-12 text-slate-400 mx-auto mb-4" />
                     <h3 className="text-lg font-semibold text-slate-900 mb-2">No Tenant Selected</h3>
                     <p className="text-slate-600 mb-4">Please select a tenant to manage data mappings</p>
-                    <Button onClick={() => handleTabChange("tenants")}>Select Tenant</Button>
+                    <Button onClick={handleBackToTenantSelector}>Select Tenant</Button>
                   </CardContent>
                 </Card>
               )}
@@ -517,14 +600,15 @@ const Home = () => {
                     <Users className="h-12 w-12 text-slate-400 mx-auto mb-4" />
                     <h3 className="text-lg font-semibold text-slate-900 mb-2">No Tenant Selected</h3>
                     <p className="text-slate-600 mb-4">Please select a tenant to manage users</p>
-                    <Button onClick={() => handleTabChange("tenants")}>Select Tenant</Button>
+                    <Button onClick={handleBackToTenantSelector}>Select Tenant</Button>
                   </CardContent>
                 </Card>
               )}
             </>
           )}
 
-          {activeTab === "channel-priority" && (
+          {/* Channel Priority - Hidden for now, may come back to this later */}
+          {/* {activeTab === "channel-priority" && (
             <>
               {selectedTenant ? (
                 <ChannelPriority
@@ -540,12 +624,12 @@ const Home = () => {
                     <Layers className="h-12 w-12 text-slate-400 mx-auto mb-4" />
                     <h3 className="text-lg font-semibold text-slate-900 mb-2">No Tenant Selected</h3>
                     <p className="text-slate-600 mb-4">Please select a tenant to view channel priority</p>
-                    <Button onClick={() => handleTabChange("tenants")}>Select Tenant</Button>
+                    <Button onClick={handleBackToTenantSelector}>Select Tenant</Button>
                   </CardContent>
                 </Card>
               )}
             </>
-          )}
+          )} */}
         </div>
       </div>
     </div>
