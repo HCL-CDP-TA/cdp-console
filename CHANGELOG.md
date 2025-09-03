@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.4](https://github.com/HCL-CDP-TA/cdp-console/compare/v0.2.3...v0.2.4) (2025-09-03)
+
+
+### Bug Fixes
+
+* Fix authentication: Add crypto-js fallback for SHA-256 hashing ([15160bb](https://github.com/HCL-CDP-TA/cdp-console/commit/15160bbf7c3d963e3521c609528324c823444dbb))
+
 ## [0.2.3](https://github.com/HCL-CDP-TA/cdp-console/compare/v0.2.2...v0.2.3) (2025-09-03)
 
 
