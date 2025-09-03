@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.2.0](https://github.com/HCL-CDP-TA/cdp-console/compare/v0.1.1...v0.2.0) (2025-09-03)
+
+
+### Features
+
+* added deplyment ([6199791](https://github.com/HCL-CDP-TA/cdp-console/commit/6199791038a19b23436bf2b035f54f260ffc8c86))
+* tenant management improvements ([93af7be](https://github.com/HCL-CDP-TA/cdp-console/commit/93af7bea9e2f9eb8cd8a85e7cc2d31ab265dc311))
+
+
+### Bug Fixes
+
+* deploy changes for release-please ([bfc9003](https://github.com/HCL-CDP-TA/cdp-console/commit/bfc9003c307b0f8c3a077a0a17af5c45137c46d9))
+* deploy changes for release-please (remove unused file) ([5290ef8](https://github.com/HCL-CDP-TA/cdp-console/commit/5290ef83ed4b3d0e5156b708841255314baa738b))
+* remove netlify deploy ([28d6b36](https://github.com/HCL-CDP-TA/cdp-console/commit/28d6b36d940450f66a559b6d0e9a5a775832814e))
+
 ## [0.1.1](https://github.com/HCL-CDP-TA/admin-console/compare/v0.1.0...v0.1.1) (2025-08-12)
 
 
