@@ -55,12 +55,6 @@ Optional variables:
 - `NEXT_PUBLIC_DEFAULT_API_KEY`: Default CDP API key
 - `NEXT_PUBLIC_GA_ID`: Google Analytics ID
 
-### Ports by Environment
-
-- **Production**: 3000
-- **Staging**: 3001
-- **Development**: 3002
-
 ## Deployment Scripts
 
 ### deploy.sh
@@ -109,7 +103,7 @@ docker run -d \
   --restart unless-stopped \
   -p 3000:3000 \
   -e NODE_ENV=production \
-  -e ADMIN_API_URL=https://your-api-endpoint.com \
+  -e ADMIN_API_URL=https://adminbackend.dev.hxcd.now.hclsoftware.cloud \
   cdp-console:latest
 ```
 

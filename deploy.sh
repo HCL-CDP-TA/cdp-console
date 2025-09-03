@@ -140,6 +140,10 @@ else
     log_info "Cloning repository from $REPO_URL"
     git clone "$REPO_URL" .
 
+    # Fetch all tags
+    log_info "Fetching tags..."
+    git fetch --tags
+
     # Checkout specific version/branch/tag
     log_info "Checking out version: $VERSION"
     git checkout "$VERSION"
@@ -173,7 +177,7 @@ case "$ENVIRONMENT" in
         NODE_ENV="production"
         ;;
     "staging")
-        PORT=3101
+        PORT=3100
         NODE_ENV="production"
         ;;
     "development")
