@@ -28,6 +28,7 @@ export const LoginForm = ({ onLoginSuccess }: LoginFormProps) => {
     try {
       // Hash the password using SHA-256
       const hashedPassword = await hashPassword(password)
+      console.log("Password hashed successfully")
 
       const response = await fetch("/api/auth/login", {
         method: "POST",
@@ -40,7 +41,10 @@ export const LoginForm = ({ onLoginSuccess }: LoginFormProps) => {
         }),
       })
 
+      console.log("Response status:", response.status, response.statusText)
+
       const data = await response.json()
+      console.log("Response data:", data)
 
       if (response.ok) {
         setAuthState(data.token, username)
@@ -49,7 +53,12 @@ export const LoginForm = ({ onLoginSuccess }: LoginFormProps) => {
         setError(data.error || "Login failed")
       }
     } catch (error) {
-      setError("Network error. Please try again.")
+      console.error("Login error details:", error)
+      if (error instanceof Error) {
+        setError(`Error: ${error.message}`)
+      } else {
+        setError("Network error. Please try again.")
+      }
     } finally {
       setLoading(false)
     }
