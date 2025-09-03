@@ -1,0 +1,35 @@
+version: "3.8"
+
+services:
+  cdp-console:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NODE_ENV: production
+        BUILD_DATE: "${BUILD_DATE:-}"
+        VCS_REF: "${VCS_REF:-}"
+        VERSION: "${VERSION:-latest}"
+    container_name: cdp-console
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - PORT=3000
+      - ADMIN_API_URL=${ADMIN_API_URL:-}
+      - NEXT_PUBLIC_GA_ID=${NEXT_PUBLIC_GA_ID:-}
+    labels:
+      - "app=cdp-console"
+      - "environment=${ENVIRONMENT:-production}"
+      - "version=${VERSION:-latest}"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  default:
+    name: cdp-console-network
