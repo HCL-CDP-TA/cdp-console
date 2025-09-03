@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.3](https://github.com/HCL-CDP-TA/cdp-console/compare/v0.2.2...v0.2.3) (2025-09-03)
+
+
+### Bug Fixes
+
+* login error handling improvements ([8ffe6bc](https://github.com/HCL-CDP-TA/cdp-console/commit/8ffe6bc2b87dc079ac8b9c5c7c85f30ed575fe36))
+
 ## [0.2.2](https://github.com/HCL-CDP-TA/cdp-console/compare/v0.2.1...v0.2.2) (2025-09-03)
 
 
