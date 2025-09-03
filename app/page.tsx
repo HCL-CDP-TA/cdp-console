@@ -31,7 +31,7 @@ import { LoginForm } from "@/components/login-form"
 import { UserManagement } from "@/components/user-management"
 import VersionDisplay from "@/components/version-display"
 import { Tenant, TenantSettings, Client } from "@/types/tenant"
-import { getAuthState, clearAuthState } from "@/lib/auth"
+import { getAuthState, clearAuthState, validateAuthState } from "@/lib/auth"
 
 const Home = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
@@ -58,23 +58,83 @@ const Home = () => {
     return () => window.removeEventListener("resize", checkScreenSize)
   }, [])
 
-  // Load tenant settings and check for saved tenant
+  // Load tenant settings on startup
   useEffect(() => {
     const savedSettings = localStorage.getItem("cdp-tenant-settings")
     if (savedSettings) {
       try {
         const settings = JSON.parse(savedSettings)
         setTenantSettings(settings)
-
-        // If there's a selectedTenantId but no current tenant, show selector
-        if (settings.selectedTenantId && !selectedTenant) {
-          setShowTenantSelector(true)
-        }
       } catch (e) {
         console.error("Failed to parse tenant settings:", e)
       }
     }
-  }, [selectedTenant])
+  }, []) // Only run once on startup
+
+  // Function to load the saved tenant from API (only when authenticated)
+  const loadSavedTenant = async (settings: TenantSettings) => {
+    if (!settings.selectedTenantId) {
+      return
+    }
+
+    // Get the JWT token for authentication
+    const authState = getAuthState()
+    if (!authState.token) {
+      console.error("No auth token available for loading saved tenant")
+      handleSessionExpired()
+      return
+    }
+
+    try {
+      const response = await fetch("/api/clients", {
+        headers: {
+          Authorization: `Bearer ${authState.token}`,
+          "Content-Type": "application/json",
+        },
+      })
+
+      if (response.status === 401 || response.status === 403) {
+        // Token is expired or invalid - clear auth but preserve tenant settings
+        console.log("Session expired - redirecting to login")
+        handleSessionExpired()
+        return
+      }
+
+      if (response.ok) {
+        const clients: Client[] = await response.json()
+        const savedClient = clients.find(client => client.id.toString() === settings.selectedTenantId)
+
+        if (savedClient) {
+          // Convert client to tenant format and set as selected
+          const tenant: Tenant = {
+            id: savedClient.id.toString(),
+            name: savedClient.Name,
+            displayName: savedClient.DisplayName,
+            clientId: savedClient.id.toString(),
+            apiKey: settings.apiKey,
+            apiEndpoint: settings.apiEndpoint,
+            isFavorite: settings.favoriteTenants?.includes(savedClient.id.toString()) || false,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          }
+
+          setSelectedTenant(tenant)
+          setShowTenantSelector(false)
+          console.log(`Auto-loaded last used tenant: ${tenant.displayName}`)
+        } else {
+          // Tenant not found, show selector
+          setShowTenantSelector(true)
+        }
+      } else {
+        // Other API errors, show selector
+        console.error(`API error: ${response.status} ${response.statusText}`)
+        setShowTenantSelector(true)
+      }
+    } catch (error) {
+      console.error("Failed to load saved tenant:", error)
+      setShowTenantSelector(true)
+    }
+  }
 
   // Wrapper function for tracking navigation
   const handleTabChange = (tab: string) => {
@@ -91,21 +151,34 @@ const Home = () => {
   }
 
   useEffect(() => {
+    // First check if we have basic auth state
     const authState = getAuthState()
+
+    // Set the basic auth state
     setIsAuthenticated(authState.isAuthenticated)
     setAuthUsername(authState.username)
 
-    // If authenticated but no tenant selected, show tenant selector
+    // Only proceed with tenant logic if we have a token
     if (authState.isAuthenticated && !selectedTenant) {
-      setShowTenantSelector(true)
+      if (tenantSettings.selectedTenantId) {
+        // Try to load the saved tenant - this will handle expired tokens
+        loadSavedTenant(tenantSettings)
+      } else {
+        // No saved tenant, show selector for tenant selection
+        setShowTenantSelector(true)
+      }
+    } else if (!authState.isAuthenticated) {
+      // Clear tenant-related state when not authenticated
+      setSelectedTenant(null)
+      setShowTenantSelector(false)
     }
-  }, [selectedTenant])
+  }, [selectedTenant, tenantSettings.selectedTenantId]) // Only depend on selectedTenantId now
 
   const handleLoginSuccess = () => {
     const authState = getAuthState()
     setIsAuthenticated(true)
     setAuthUsername(authState.username)
-    setShowTenantSelector(true) // Show tenant selector after login
+    // The useEffect will handle tenant loading/selection based on saved settings
   }
 
   const handleLogout = () => {
@@ -115,6 +188,17 @@ const Home = () => {
     setAuthUsername(null)
     setSelectedTenant(null)
     setShowTenantSelector(false)
+  }
+
+  const handleSessionExpired = () => {
+    // Handle expired session - clear auth but preserve tenant settings
+    console.log("Session expired - clearing auth state but preserving tenant settings")
+    clearAuthState()
+    setIsAuthenticated(false)
+    setAuthUsername(null)
+    setSelectedTenant(null)
+    setShowTenantSelector(false)
+    // Note: We don't clear tenantSettings here so the user can return to their last tenant
   }
 
   const handleManageTenants = () => {

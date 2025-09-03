@@ -1,9 +1,10 @@
 #!/bin/bash
 
 # CDP Console Docker Deployment Script
-# Usage: ./deploy.sh [version] [environment]
+# Usage: ./deploy.sh [version] [environment] [--local]
 # Example: ./deploy.sh v1.2.3 production
 # Example: ./deploy.sh main development
+# Example: ./deploy.sh local development --local (uses current directory)
 
 set -e  # Exit on any error
 
@@ -43,10 +44,26 @@ log_error() {
 # Parse arguments
 VERSION=${1:-$DEFAULT_VERSION}
 ENVIRONMENT=${2:-$DEFAULT_ENV}
+LOCAL_MODE=false
+
+# Check for --local flag
+for arg in "$@"; do
+    if [ "$arg" = "--local" ]; then
+        LOCAL_MODE=true
+        break
+    fi
+done
+
+# If version is "local", automatically enable local mode
+if [ "$VERSION" = "local" ]; then
+    LOCAL_MODE=true
+    VERSION="local-$(date +%Y%m%d-%H%M%S)"
+fi
 
 log_info "Starting deployment of ${APP_NAME}"
 log_info "Version: ${VERSION}"
 log_info "Environment: ${ENVIRONMENT}"
+log_info "Local mode: ${LOCAL_MODE}"
 
 # Check if Docker is running
 if ! docker info > /dev/null 2>&1; then
@@ -56,7 +73,7 @@ fi
 
 # Function to cleanup build context
 cleanup() {
-    if [ -d "$BUILD_CONTEXT" ]; then
+    if [ "$LOCAL_MODE" = false ] && [ -d "$BUILD_CONTEXT" ]; then
         log_info "Cleaning up build context..."
         rm -rf "$BUILD_CONTEXT"
     fi
@@ -65,15 +82,30 @@ cleanup() {
 # Set trap to cleanup on exit
 trap cleanup EXIT
 
+# Load environment variables from .env.local if it exists (before container operations)
+if [ -f ".env.local" ]; then
+    log_info "Loading environment variables from .env.local"
+    set -a  # automatically export all variables
+    source .env.local
+    set +a
+else
+    log_warning "No .env.local file found, using default environment variables"
+fi
+
 # Stop and remove existing container if running
+log_info "Checking for existing container: $CONTAINER_NAME"
 if docker ps -q -f name="$CONTAINER_NAME" | grep -q .; then
     log_info "Stopping existing container: $CONTAINER_NAME"
-    docker stop "$CONTAINER_NAME"
+    docker stop "$CONTAINER_NAME" || log_warning "Failed to stop container gracefully"
+else
+    log_info "No running container found with name: $CONTAINER_NAME"
 fi
 
 if docker ps -aq -f name="$CONTAINER_NAME" | grep -q .; then
     log_info "Removing existing container: $CONTAINER_NAME"
-    docker rm "$CONTAINER_NAME"
+    docker rm "$CONTAINER_NAME" || log_warning "Failed to remove container"
+else
+    log_info "No existing container found to remove"
 fi
 
 # Remove existing image to force rebuild
@@ -82,52 +114,74 @@ if docker images -q "$IMAGE_NAME" | grep -q .; then
     docker rmi "$IMAGE_NAME" || true
 fi
 
-# Create build context and clone repository
-log_info "Preparing build context..."
-mkdir -p "$BUILD_CONTEXT"
-cd "$BUILD_CONTEXT"
+# Prepare build context based on mode
+if [ "$LOCAL_MODE" = true ]; then
+    log_info "Using local directory for build..."
+    BUILD_CONTEXT="$(pwd)"
+    
+    # Check if Dockerfile exists
+    if [ ! -f "$BUILD_CONTEXT/Dockerfile" ]; then
+        log_error "Dockerfile not found in current directory: $BUILD_CONTEXT"
+        exit 1
+    fi
+    
+    # Get current git info if available
+    if git rev-parse --git-dir > /dev/null 2>&1; then
+        COMMIT_HASH=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+    else
+        COMMIT_HASH="local"
+    fi
+else
+    # Create build context and clone repository
+    log_info "Preparing build context..."
+    mkdir -p "$BUILD_CONTEXT"
+    cd "$BUILD_CONTEXT"
 
-log_info "Cloning repository from $REPO_URL"
-git clone "$REPO_URL" .
+    log_info "Cloning repository from $REPO_URL"
+    git clone "$REPO_URL" .
 
-# Checkout specific version/branch/tag
-log_info "Checking out version: $VERSION"
-git checkout "$VERSION"
+    # Checkout specific version/branch/tag
+    log_info "Checking out version: $VERSION"
+    git checkout "$VERSION"
 
-# Get commit hash for tagging
-COMMIT_HASH=$(git rev-parse --short HEAD)
+    # Get commit hash for tagging
+    COMMIT_HASH=$(git rev-parse --short HEAD)
+fi
 IMAGE_TAG="${VERSION}-${COMMIT_HASH}"
 
 log_info "Building Docker image: ${IMAGE_NAME}:${IMAGE_TAG}"
 
-# Build the Docker image
+# Build the Docker image with environment variables for Next.js
 docker build \
     --build-arg NODE_ENV="$ENVIRONMENT" \
     --build-arg BUILD_DATE="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
     --build-arg VCS_REF="$COMMIT_HASH" \
     --build-arg VERSION="$VERSION" \
+    --build-arg NEXT_PUBLIC_DEFAULT_API_ENDPOINT="${NEXT_PUBLIC_DEFAULT_API_ENDPOINT:-}" \
+    --build-arg NEXT_PUBLIC_DEFAULT_API_KEY="${NEXT_PUBLIC_DEFAULT_API_KEY:-}" \
+    --build-arg NEXT_PUBLIC_GA_ID="${NEXT_PUBLIC_GA_ID:-}" \
     -t "${IMAGE_NAME}:${IMAGE_TAG}" \
     -t "${IMAGE_NAME}:latest" \
-    .
+    "$BUILD_CONTEXT"
 
 log_success "Docker image built successfully"
 
 # Determine port and environment variables based on environment
 case "$ENVIRONMENT" in
     "production")
-        PORT=3000
+        PORT=3100
         NODE_ENV="production"
         ;;
     "staging")
-        PORT=3001
+        PORT=3101
         NODE_ENV="production"
         ;;
     "development")
-        PORT=3002
+        PORT=3100
         NODE_ENV="development"
         ;;
     *)
-        PORT=3000
+        PORT=3100
         NODE_ENV="production"
         ;;
 esac
@@ -140,6 +194,10 @@ docker run -d \
     -p "$PORT:3000" \
     -e NODE_ENV="$NODE_ENV" \
     -e PORT=3000 \
+    -e ADMIN_API_URL="${ADMIN_API_URL:-https://adminbackend.dev.hxcd.now.hclsoftware.cloud}" \
+    -e NEXT_PUBLIC_DEFAULT_API_ENDPOINT="${NEXT_PUBLIC_DEFAULT_API_ENDPOINT:-https://dmp-sst-api.dev.hxcd.now.hclsoftware.cloud}" \
+    -e NEXT_PUBLIC_DEFAULT_API_KEY="${NEXT_PUBLIC_DEFAULT_API_KEY:-}" \
+    -e NEXT_PUBLIC_GA_ID="${NEXT_PUBLIC_GA_ID:-}" \
     --label "app=$APP_NAME" \
     --label "environment=$ENVIRONMENT" \
     --label "version=$VERSION" \

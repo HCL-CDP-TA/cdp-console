@@ -29,13 +29,22 @@ ARG NODE_ENV=production
 ARG BUILD_DATE
 ARG VCS_REF
 ARG VERSION
+ARG NEXT_PUBLIC_DEFAULT_API_ENDPOINT
+ARG NEXT_PUBLIC_DEFAULT_API_KEY
+ARG NEXT_PUBLIC_GA_ID
 
 # Set environment variables for build
-ENV NODE_ENV=$NODE_ENV
+ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV NEXT_PUBLIC_DEFAULT_API_ENDPOINT=$NEXT_PUBLIC_DEFAULT_API_ENDPOINT
+ENV NEXT_PUBLIC_DEFAULT_API_KEY=$NEXT_PUBLIC_DEFAULT_API_KEY
+ENV NEXT_PUBLIC_GA_ID=$NEXT_PUBLIC_GA_ID
 
 # Build the application
 RUN npm run build
+
+# Ensure public directory exists (create empty one if needed)
+RUN mkdir -p /app/public
 
 # Production image, copy all the files and run next
 FROM base AS runner
@@ -46,9 +55,13 @@ RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
 # Copy built application
-COPY --from=builder /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+# Copy configuration files needed for runtime
+COPY --from=builder --chown=nextjs:nodejs /app/next.config.js ./next.config.js
+COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
 
 # Copy production dependencies
 COPY --from=deps --chown=nextjs:nodejs /app/node_modules ./node_modules
