@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/HCL-CDP-TA/cdp-console/compare/v0.2.1...v0.2.2) (2025-09-03)
+
+
+### Bug Fixes
+
+* deploy fix .env ([92674d7](https://github.com/HCL-CDP-TA/cdp-console/commit/92674d71d37d0b92c70c97da5b5a6562ef439388))
+
 ## [0.2.1](https://github.com/HCL-CDP-TA/cdp-console/compare/v0.2.0...v0.2.1) (2025-09-03)
 
 
