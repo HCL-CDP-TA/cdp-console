@@ -144,6 +144,14 @@ else
     log_info "Fetching tags..."
     git fetch --tags
 
+    # Copy .env.local from where the deploy script was run
+    if [ -f "$OLDPWD/.env.local" ]; then
+        log_info "Copying .env.local into build context..."
+        cp "$OLDPWD/.env.local" .
+    else
+        log_warning "No .env.local file found in deployment directory"
+    fi
+
     # Checkout specific version/branch/tag
     log_info "Checking out version: $VERSION"
     git checkout "$VERSION"
