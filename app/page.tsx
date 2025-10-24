@@ -19,6 +19,7 @@ import {
   ChevronRight,
   Gauge,
   Star,
+  UserCog,
 } from "lucide-react"
 import { TenantManager } from "@/components/tenant-manager"
 import { TenantSelector } from "@/components/tenant-selector"
@@ -72,7 +73,7 @@ const Home = () => {
   }, []) // Only run once on startup
 
   // Function to load the saved tenant from API (only when authenticated)
-  const loadSavedTenant = async (settings: TenantSettings) => {
+  const loadSavedTenant = useCallback(async (settings: TenantSettings) => {
     if (!settings.selectedTenantId) {
       return
     }
@@ -134,7 +135,7 @@ const Home = () => {
       console.error("Failed to load saved tenant:", error)
       setShowTenantSelector(true)
     }
-  }
+  }, []) // No external dependencies for this function
 
   // Wrapper function for tracking navigation
   const handleTabChange = (tab: string) => {
@@ -172,7 +173,7 @@ const Home = () => {
       setSelectedTenant(null)
       setShowTenantSelector(false)
     }
-  }, [selectedTenant, tenantSettings.selectedTenantId]) // Only depend on selectedTenantId now
+  }, [selectedTenant, tenantSettings, loadSavedTenant]) // Include all dependencies
 
   const handleLoginSuccess = () => {
     const authState = getAuthState()
@@ -211,10 +212,10 @@ const Home = () => {
     setShowTenantSelector(true)
   }
 
-  const favoriteTenants = tenantSettings.favoriteTenants || []
-
   // Fetch favorite clients when tenantSettings change
   const fetchFavoriteClients = useCallback(async () => {
+    const favoriteTenants = tenantSettings.favoriteTenants || []
+
     if (!tenantSettings.apiKey || !tenantSettings.apiEndpoint || favoriteTenants.length === 0) {
       setFavoriteClients([])
       return
@@ -241,7 +242,7 @@ const Home = () => {
     } catch (error) {
       console.error("Error fetching favorite clients:", error)
     }
-  }, [tenantSettings.apiKey, tenantSettings.apiEndpoint, favoriteTenants])
+  }, [tenantSettings.apiKey, tenantSettings.apiEndpoint, tenantSettings.favoriteTenants])
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -423,7 +424,7 @@ const Home = () => {
                         ? "text-slate-700 hover:bg-slate-50"
                         : "text-slate-400 cursor-not-allowed"
                     }`}>
-                    <Database className="h-4 w-4" />
+                    <UserCog className="h-4 w-4" />
                     {!isCollapsed && "User Properties"}
                   </button>
                 </TooltipTrigger>

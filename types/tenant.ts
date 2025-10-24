@@ -8,6 +8,9 @@ export interface Tenant {
   isFavorite?: boolean
   createdAt: string
   updatedAt: string
+  // Core API credentials for offline data sources
+  coreApiUsername?: string
+  coreApiPassword?: string // SHA-256 encoded password
 }
 
 export interface TenantSettings {
@@ -41,6 +44,14 @@ export interface DataMapping {
 }
 
 export type DataSource = "analyze_post" | "dataingestionpi"
+
+export interface OfflineDataSource {
+  id: number
+  name: string
+  createdOn: string
+  isActive: number
+  type: string
+}
 
 export interface ChannelPriority {
   KeyName: string

@@ -68,5 +68,3 @@ export const hashPassword = async (password: string): Promise<string> => {
   // Fallback: Use crypto-js for reliable SHA-256
   return CryptoJS.SHA256(password).toString(CryptoJS.enc.Hex)
 }
-
-

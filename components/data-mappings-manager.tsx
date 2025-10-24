@@ -10,7 +10,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import {
   AlertDialog,
@@ -33,12 +32,28 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination"
-import { Plus, Edit2, Trash2, MapPin, RefreshCw, Search, Database, Check, ChevronsUpDown } from "lucide-react"
-import { Tenant, DataMapping, DataSource } from "@/types/tenant"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import {
+  Plus,
+  Edit2,
+  Trash2,
+  MapPin,
+  RefreshCw,
+  Search,
+  Database,
+  Check,
+  ChevronsUpDown,
+  FileUp,
+  Braces,
+  CheckCircle,
+  AlertCircle,
+  X,
+} from "lucide-react"
+import { Tenant, DataMapping, DataSource, OfflineDataSource } from "@/types/tenant"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
-import { X } from "lucide-react"
 import { validateAuthState } from "@/lib/auth"
+import { hashPassword } from "@/lib/auth"
 import {
   trackDataManagement,
   trackError,
@@ -67,15 +82,30 @@ export const DataMappingsManager = ({ tenant, onAuthExpired }: DataMappingsManag
   const [metadataError, setMetadataError] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
+
+  // Core API state for offline data sources
+  const [offlineDataSources, setOfflineDataSources] = useState<OfflineDataSource[]>([])
+  const [coreApiToken, setCoreApiToken] = useState<string | null>(null)
+  const [selectedOfflineDataSource, setSelectedOfflineDataSource] = useState<string | null>(null)
+  const [offlineDataSourcesLoading, setOfflineDataSourcesLoading] = useState(false)
+  const [showCoreApiCredentials, setShowCoreApiCredentials] = useState(false)
+  const [coreApiCredentials, setCoreApiCredentials] = useState({
+    username: "",
+    password: "",
+  })
   const [formData, setFormData] = useState({
     userProperty: "",
+    userProperties: "", // For bulk creation
     profileUpdateFunction: "UPDATE",
     isMandatory: false,
-    metadata: "{}",
+    metadata: JSON.stringify({ input_col: "properties__" }),
     alternateKeys: [""],
     customMetadata: [{ key: "", value: "" }],
-    dataSource: "analyze_post" as DataSource,
+    dataSource: "analyze_post" as DataSource | string,
   })
+  const [isBulkMode, setIsBulkMode] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
   const updateFunctions = [
     "UPDATE",
@@ -92,6 +122,236 @@ export const DataMappingsManager = ({ tenant, onAuthExpired }: DataMappingsManag
 
   const getApiDataSource = (dataSource: DataSource): string => {
     return dataSource === "dataingestionpi" ? "dataingestionapi" : dataSource
+  }
+
+  // Core API authentication functions
+  const authenticateCoreApi = async (username: string, password: string): Promise<string | null> => {
+    try {
+      const hashedPassword = await hashPassword(password)
+      console.log("Core API Authentication - Frontend:", {
+        username,
+        originalPasswordLength: password.length,
+        hashedPasswordLength: hashedPassword.length,
+        hashedPasswordPrefix: hashedPassword.substring(0, 8) + "...",
+        timestamp: new Date().toISOString(),
+      })
+
+      return await authenticateCoreApiWithHash(username, hashedPassword)
+    } catch (error) {
+      console.error("Core API authentication error:", error)
+      return null
+    }
+  }
+
+  const authenticateCoreApiWithHash = async (username: string, hashedPassword: string): Promise<string | null> => {
+    try {
+      console.log("Core API Authentication With Hash - Frontend:", {
+        username,
+        hashedPasswordLength: hashedPassword.length,
+        hashedPasswordPrefix: hashedPassword.substring(0, 8) + "...",
+        timestamp: new Date().toISOString(),
+      })
+
+      const response = await fetch("/api/core-auth/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password: hashedPassword }),
+      })
+
+      console.log("Core API Authentication - Response received:", {
+        status: response.status,
+        ok: response.ok,
+        statusText: response.statusText,
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        console.log("Core API Authentication - Success:", {
+          hasAccessToken: !!data.access_token,
+          tokenLength: data.access_token?.length,
+          tokenType: data.token_type,
+        })
+        return data.access_token
+      } else {
+        const errorData = await response.json()
+        console.error("Core API Authentication - Failed:", {
+          status: response.status,
+          errorData,
+          sentCredentials: {
+            username,
+            hashedPasswordLength: hashedPassword.length,
+            hashedPasswordPrefix: hashedPassword.substring(0, 8) + "...",
+          },
+        })
+      }
+      return null
+    } catch (error) {
+      console.error("Core API authentication with hash error:", error)
+      return null
+    }
+  }
+
+  const fetchOfflineDataSources = useCallback(
+    async (token: string): Promise<OfflineDataSource[]> => {
+      try {
+        console.log("Fetch Offline Data Sources - Starting request:", {
+          clientId: tenant.clientId,
+          hasToken: !!token,
+          tokenLength: token?.length,
+          timestamp: new Date().toISOString(),
+        })
+
+        const response = await fetch(`/api/offline-data-sources/${tenant.clientId}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        })
+
+        console.log("Fetch Offline Data Sources - Response received:", {
+          status: response.status,
+          ok: response.ok,
+          statusText: response.statusText,
+        })
+
+        if (response.ok) {
+          const data = await response.json()
+          console.log("Fetch Offline Data Sources - Success:", {
+            fullResponseData: data,
+            hasDataArray: !!data.data,
+            dataArrayLength: data.data?.length || 0,
+            dataItems:
+              data.data?.map((item: any) => ({
+                id: item.id,
+                name: item.name,
+                isActive: item.isActive,
+                type: item.type,
+              })) || [],
+          })
+          return data.data || []
+        } else if (response.status === 401) {
+          const errorData = await response.json()
+          console.log("Fetch Offline Data Sources - 401 error:", errorData)
+          if (errorData.shouldReauth) {
+            throw new Error("REAUTH_REQUIRED")
+          }
+        } else {
+          const errorText = await response.text()
+          console.error("Fetch Offline Data Sources - Error:", {
+            status: response.status,
+            statusText: response.statusText,
+            errorText,
+          })
+        }
+        return []
+      } catch (error) {
+        if (error instanceof Error && error.message === "REAUTH_REQUIRED") {
+          throw error
+        }
+        console.error("Error fetching offline data sources:", error)
+        return []
+      }
+    },
+    [tenant.clientId],
+  )
+
+  const loadOfflineDataSources = useCallback(async () => {
+    setOfflineDataSourcesLoading(true)
+    try {
+      // Check if we have stored credentials
+      const storedTenant = JSON.parse(localStorage.getItem(`tenant-${tenant.id}`) || "{}")
+      if (storedTenant.coreApiUsername && storedTenant.coreApiPassword) {
+        console.log("Load Offline Data Sources - Using stored credentials:", {
+          username: storedTenant.coreApiUsername,
+          hasStoredPassword: !!storedTenant.coreApiPassword,
+          storedPasswordLength: storedTenant.coreApiPassword?.length,
+        })
+
+        // Try to authenticate with stored credentials (already hashed)
+        const token = await authenticateCoreApiWithHash(storedTenant.coreApiUsername, storedTenant.coreApiPassword)
+        if (token) {
+          setCoreApiToken(token)
+          try {
+            const dataSources = await fetchOfflineDataSources(token)
+            setOfflineDataSources(dataSources.filter(ds => ds.isActive === 1))
+          } catch (error) {
+            if (error instanceof Error && error.message === "REAUTH_REQUIRED") {
+              // Token expired, need to re-authenticate
+              const newToken = await authenticateCoreApiWithHash(
+                storedTenant.coreApiUsername,
+                storedTenant.coreApiPassword,
+              )
+              if (newToken) {
+                setCoreApiToken(newToken)
+                const dataSources = await fetchOfflineDataSources(newToken)
+                setOfflineDataSources(dataSources.filter(ds => ds.isActive === 1))
+              } else {
+                console.error("Failed to re-authenticate with Core API")
+                setOfflineDataSources([])
+              }
+            }
+          }
+        } else {
+          // Stored credentials are invalid, prompt for new ones
+          console.warn("Stored credentials are invalid, prompting for new ones")
+          setShowCoreApiCredentials(true)
+        }
+      } else {
+        // No stored credentials, prompt for them
+        console.log("No stored Core API credentials found")
+        setShowCoreApiCredentials(true)
+      }
+    } catch (error) {
+      console.error("Error loading offline data sources:", error)
+      setOfflineDataSources([])
+    } finally {
+      setOfflineDataSourcesLoading(false)
+    }
+  }, [tenant.id, fetchOfflineDataSources])
+
+  const handleCoreApiCredentialsSubmit = async () => {
+    console.log("Core API Credentials Submit - Starting:", {
+      username: coreApiCredentials.username,
+      passwordLength: coreApiCredentials.password.length,
+      timestamp: new Date().toISOString(),
+    })
+
+    // Don't hash here - let authenticateCoreApi handle the hashing
+    const token = await authenticateCoreApi(coreApiCredentials.username, coreApiCredentials.password)
+
+    if (token) {
+      console.log("Core API Credentials Submit - Authentication successful")
+      setCoreApiToken(token)
+
+      // Store credentials in localStorage (with hashed password)
+      const hashedPassword = await hashPassword(coreApiCredentials.password)
+      const storedTenant = JSON.parse(localStorage.getItem(`tenant-${tenant.id}`) || "{}")
+      const updatedTenant = {
+        ...storedTenant,
+        coreApiUsername: coreApiCredentials.username,
+        coreApiPassword: hashedPassword,
+      }
+      localStorage.setItem(`tenant-${tenant.id}`, JSON.stringify(updatedTenant))
+
+      // Fetch offline data sources
+      try {
+        console.log("Handle Core API Credentials Submit - Fetching data sources...")
+        const dataSources = await fetchOfflineDataSources(token)
+        console.log("Handle Core API Credentials Submit - Data sources received:", {
+          dataSourcesLength: dataSources.length,
+          allDataSources: dataSources,
+          activeDataSources: dataSources.filter(ds => ds.isActive === 1),
+        })
+        setOfflineDataSources(dataSources.filter(ds => ds.isActive === 1))
+        setShowCoreApiCredentials(false)
+        setCoreApiCredentials({ username: "", password: "" })
+      } catch (error) {
+        console.error("Failed to fetch offline data sources:", error)
+      }
+    } else {
+      console.error("Core API Credentials Submit - Authentication failed")
+      alert("Authentication failed. Please check your credentials.")
+    }
   }
 
   const fetchMappings = useCallback(
@@ -129,6 +389,60 @@ export const DataMappingsManager = ({ tenant, onAuthExpired }: DataMappingsManag
     [tenant.clientId, tenant.apiKey, tenant.apiEndpoint],
   )
 
+  const fetchOfflineMappings = useCallback(
+    async (offlineDataSourceName: string) => {
+      setLoading(true)
+      console.log("Fetching mappings for offline data source:", {
+        offlineDataSourceName,
+        tenantClientId: tenant.clientId,
+        hasToken: !!coreApiToken,
+      })
+
+      try {
+        const response = await fetch(`/api/mappings/${tenant.clientId}/${offlineDataSourceName}`, {
+          headers: {
+            "x-api-key": tenant.apiKey,
+            "x-api-endpoint": tenant.apiEndpoint,
+            "Content-Type": "application/json",
+          },
+        })
+
+        if (response.ok) {
+          const data = await response.json()
+          console.log("Successfully fetched offline mappings:", {
+            dataSourceName: offlineDataSourceName,
+            mappingsCount: data.length,
+          })
+          setMappings(data)
+          trackAPICall(`/api/mappings/${tenant.clientId}/${offlineDataSourceName}`, "GET", true)
+        } else {
+          console.error("Failed to fetch offline mappings:", response.statusText)
+          setMappings([])
+          trackAPICall(`/api/mappings/${tenant.clientId}/${offlineDataSourceName}`, "GET", false)
+          trackError("api_error", `Failed to fetch offline mappings: ${response.statusText}`, "data-mappings-manager")
+        }
+      } catch (error) {
+        console.error("Error fetching offline mappings:", error)
+        setMappings([])
+        trackAPICall(`/api/mappings/${tenant.clientId}/${offlineDataSourceName}`, "GET", false)
+        trackError("network_error", `Error fetching offline mappings: ${error}`, "data-mappings-manager")
+      } finally {
+        setLoading(false)
+      }
+    },
+    [tenant.clientId, tenant.apiKey, tenant.apiEndpoint, coreApiToken],
+  )
+
+  const fetchCurrentMappings = useCallback(() => {
+    if (selectedOfflineDataSource) {
+      console.log("Fetching mappings for selected offline data source:", selectedOfflineDataSource)
+      fetchOfflineMappings(selectedOfflineDataSource)
+    } else {
+      console.log("Fetching mappings for selected standard data source:", selectedDataSource)
+      fetchMappings(selectedDataSource)
+    }
+  }, [selectedOfflineDataSource, selectedDataSource, fetchMappings, fetchOfflineMappings])
+
   const fetchUserProperties = useCallback(async () => {
     setLoadingProperties(true)
     try {
@@ -159,25 +473,102 @@ export const DataMappingsManager = ({ tenant, onAuthExpired }: DataMappingsManag
     }
   }, [tenant.clientId, tenant.apiKey, tenant.apiEndpoint])
 
+  const createUserProperty = useCallback(
+    async (propertyName: string): Promise<boolean> => {
+      try {
+        console.log("Creating new user property:", { propertyName, tenantId: tenant.clientId })
+
+        const response = await fetch(`/api/user-properties/${tenant.clientId}`, {
+          method: "POST",
+          headers: {
+            "x-api-key": tenant.apiKey,
+            "x-api-endpoint": tenant.apiEndpoint,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            tenantId: tenant.clientId,
+            userProperty: propertyName,
+            dmpDataPointCode: "",
+            dataType: "STRING",
+            preference: "none",
+            priority: 1,
+          }),
+        })
+
+        if (response.ok) {
+          console.log("Successfully created user property:", propertyName)
+          // Refresh the user properties list to include the new property
+          await fetchUserProperties()
+          trackDataManagement("create", "user_property", {
+            userProperty: propertyName,
+            dataType: "STRING",
+            preference: "none",
+            priority: 1,
+          })
+          return true
+        } else {
+          console.error("Failed to create user property:", response.statusText)
+          const errorData = await response.text()
+          console.error("Error details:", errorData)
+          return false
+        }
+      } catch (error) {
+        console.error("Error creating user property:", error)
+        return false
+      }
+    },
+    [tenant.clientId, tenant.apiKey, tenant.apiEndpoint, fetchUserProperties],
+  )
+
   useEffect(() => {
-    fetchMappings(selectedDataSource)
-  }, [fetchMappings, selectedDataSource])
+    fetchCurrentMappings()
+  }, [fetchCurrentMappings])
 
   useEffect(() => {
     fetchUserProperties()
   }, [fetchUserProperties])
 
+  useEffect(() => {
+    console.log("Offline Data Sources State Changed:", {
+      offlineDataSourcesLength: offlineDataSources.length,
+      offlineDataSources: offlineDataSources.map(ds => ({
+        id: ds.id,
+        name: ds.name,
+        isActive: ds.isActive,
+      })),
+      loading: offlineDataSourcesLoading,
+      selectedOffline: selectedOfflineDataSource,
+      timestamp: new Date().toISOString(),
+    })
+  }, [offlineDataSources, offlineDataSourcesLoading, selectedOfflineDataSource])
+
+  useEffect(() => {
+    console.log("Data Mappings Manager - Component mounted/updated:", {
+      tenantId: tenant.id,
+      clientId: tenant.clientId,
+      tenantName: tenant.name,
+      hasApiKey: !!tenant.apiKey,
+      timestamp: new Date().toISOString(),
+    })
+    loadOfflineDataSources()
+  }, [tenant.id, tenant.clientId, tenant.name, tenant.apiKey, loadOfflineDataSources])
+
   const resetForm = () => {
+    const currentDataSource = selectedOfflineDataSource || selectedDataSource
     setFormData({
       userProperty: "",
+      userProperties: "",
       profileUpdateFunction: "UPDATE",
       isMandatory: false,
-      metadata: "{}",
+      metadata: JSON.stringify({ input_col: "properties__" }),
       alternateKeys: [""],
       customMetadata: [{ key: "", value: "" }],
-      dataSource: "analyze_post" as DataSource,
+      dataSource: currentDataSource,
     })
     setMetadataError("")
+    setErrorMessage(null)
+    setSuccessMessage(null)
+    setIsBulkMode(false)
   }
 
   const parseMetadata = (metadata: string) => {
@@ -329,8 +720,70 @@ export const DataMappingsManager = ({ tenant, onAuthExpired }: DataMappingsManag
     }))
   }
 
+  const createSingleMapping = async (
+    propertyName: string,
+    apiDataSource: string,
+    validatedMetadata: string,
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      // Check if user property exists, create it if it doesn't
+      const propertyExists = userProperties.includes(propertyName)
+
+      if (!propertyExists && propertyName.trim()) {
+        console.log("User property doesn't exist, creating it first:", propertyName)
+        const propertyCreated = await createUserProperty(propertyName.trim())
+
+        if (!propertyCreated) {
+          console.error("Failed to create user property, aborting mapping creation")
+          return { success: false, error: "Failed to create user property" }
+        }
+      }
+
+      // Create new mapping
+      const response = await fetch(`/api/mappings/${tenant.clientId}/${apiDataSource}`, {
+        method: "POST",
+        headers: {
+          "x-api-key": tenant.apiKey,
+          "x-api-endpoint": tenant.apiEndpoint,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userProperty: propertyName,
+          profileUpdateFunction: formData.profileUpdateFunction,
+          isMandatory: formData.isMandatory,
+          tenantId: tenant.clientId,
+          dataSourceName: apiDataSource,
+          metadata: validatedMetadata,
+        }),
+      })
+
+      if (response.ok) {
+        trackDataManagement("create", "data_mapping", {
+          userProperty: propertyName,
+          profileUpdateFunction: formData.profileUpdateFunction,
+          dataSource: formData.dataSource,
+        })
+        trackAPICall(`/api/mappings/${tenant.clientId}/${apiDataSource}`, "POST", true)
+        return { success: true }
+      } else {
+        const errorData = await response.json().catch(() => ({ error: response.statusText }))
+        const errorMessage = errorData.message || errorData.error || response.statusText
+        console.error("Failed to create mapping:", response.statusText)
+        trackAPICall(`/api/mappings/${tenant.clientId}/${apiDataSource}`, "POST", false)
+        return { success: false, error: errorMessage }
+      }
+    } catch (error) {
+      console.error("Error creating mapping:", error)
+      return { success: false, error: error instanceof Error ? error.message : "Unknown error" }
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    // Clear previous messages
+    setErrorMessage(null)
+    setSuccessMessage(null)
 
     const validatedMetadata = validateAndBuildMetadata()
     if (!validatedMetadata) {
@@ -344,11 +797,25 @@ export const DataMappingsManager = ({ tenant, onAuthExpired }: DataMappingsManag
     try {
       // For new mappings, use the selected dataSource from the form
       // For editing, use the current tab's dataSource
-      const apiDataSource = editingMapping
-        ? getApiDataSource(selectedDataSource)
-        : getApiDataSource(formData.dataSource)
+      const currentDataSource = editingMapping ? selectedOfflineDataSource || selectedDataSource : formData.dataSource
 
-      if (editingMapping) {
+      // Check if it's an offline data source
+      const isOfflineDataSource =
+        typeof currentDataSource === "string" && offlineDataSources.some(ds => ds.name === currentDataSource)
+
+      const apiDataSource = isOfflineDataSource ? currentDataSource : getApiDataSource(currentDataSource as DataSource)
+
+      console.log("Form submission:", {
+        isEditing,
+        isBulkMode,
+        currentDataSource,
+        isOfflineDataSource,
+        apiDataSource,
+        formDataSource: formData.dataSource,
+      })
+
+      if (isEditing) {
+        // Handle single mapping edit
         const response = await fetch(`/api/mappings/${tenant.clientId}/${apiDataSource}/update`, {
           method: "PUT",
           headers: {
@@ -367,14 +834,14 @@ export const DataMappingsManager = ({ tenant, onAuthExpired }: DataMappingsManag
         })
 
         if (response.ok) {
-          await fetchMappings(selectedDataSource)
+          await fetchCurrentMappings()
           setIsEditDialogOpen(false)
           setEditingMapping(null)
           resetForm()
           trackDataManagement("update", "data_mapping", {
             userProperty: formData.userProperty,
             profileUpdateFunction: formData.profileUpdateFunction,
-            dataSource: selectedDataSource,
+            dataSource: currentDataSource,
           })
           trackAPICall(`/api/mappings/${tenant.clientId}/${apiDataSource}/update`, "PUT", true)
         } else {
@@ -383,45 +850,101 @@ export const DataMappingsManager = ({ tenant, onAuthExpired }: DataMappingsManag
           trackFormInteraction("edit", "data_mapping", "error")
           trackError("api_error", `Failed to update mapping: ${response.statusText}`, "data-mappings-manager")
         }
-      } else {
-        // Create new mapping
-        const response = await fetch(`/api/mappings/${tenant.clientId}/${apiDataSource}`, {
-          method: "POST",
-          headers: {
-            "x-api-key": tenant.apiKey,
-            "x-api-endpoint": tenant.apiEndpoint,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            userProperty: formData.userProperty,
-            profileUpdateFunction: formData.profileUpdateFunction,
-            isMandatory: formData.isMandatory,
-            tenantId: tenant.clientId,
-            dataSourceName: apiDataSource,
-            metadata: validatedMetadata,
-          }),
-        })
+      } else if (isBulkMode) {
+        // Handle bulk mapping creation
+        const propertyNames = formData.userProperties
+          .split("\n")
+          .map(name => name.trim())
+          .filter(name => name !== "")
 
-        if (response.ok) {
-          // Refresh the appropriate tab based on where the mapping was created
-          await fetchMappings(editingMapping ? selectedDataSource : formData.dataSource)
+        if (propertyNames.length === 0) {
+          setErrorMessage("Please enter at least one property name")
+          return
+        }
+
+        let successCount = 0
+        let skippedCount = 0
+        let failureCount = 0
+        const skippedProperties: string[] = []
+        const failedProperties: string[] = []
+
+        // Process each property
+        for (const propertyName of propertyNames) {
+          // Create metadata with the property-specific input column
+          const propertyMetadata = { ...JSON.parse(validatedMetadata), input_col: `properties__${propertyName}` }
+          const propertyMetadataString = JSON.stringify(propertyMetadata)
+
+          const result = await createSingleMapping(propertyName, apiDataSource, propertyMetadataString)
+
+          if (result.success) {
+            successCount++
+          } else {
+            // Check if this is a "mapping already exists" error
+            const isAlreadyExists =
+              result.error &&
+              (result.error.toLowerCase().includes("already exists") ||
+                result.error.toLowerCase().includes("duplicate") ||
+                result.error.includes("already exists for"))
+
+            if (isAlreadyExists) {
+              skippedCount++
+              skippedProperties.push(propertyName)
+            } else {
+              failureCount++
+              failedProperties.push(propertyName)
+            }
+          }
+        }
+
+        // Show results summary
+        if (successCount > 0 || skippedCount > 0) {
+          let successMsg = ""
+          if (successCount > 0 && skippedCount > 0) {
+            successMsg = `Created ${successCount} new mappings and skipped ${skippedCount} existing mappings`
+          } else if (successCount > 0) {
+            successMsg = `Successfully created ${successCount} ${successCount === 1 ? "mapping" : "mappings"}`
+          } else if (skippedCount > 0) {
+            successMsg = `All ${skippedCount} ${skippedCount === 1 ? "mapping" : "mappings"} already exist`
+          }
+
+          console.log(successMsg)
+          setSuccessMessage(successMsg)
+        }
+
+        if (skippedCount > 0) {
+          console.log(`Skipped ${skippedCount} mappings that already exist: ${skippedProperties.join(", ")}`)
+        }
+
+        if (failureCount > 0) {
+          const errorMsg = `Failed to create ${failureCount} mappings: ${failedProperties.join(", ")}`
+          setErrorMessage(errorMsg)
+          trackFormInteraction("add", "data_mapping", "error")
+        }
+
+        // Refresh the mappings list and close dialog if any succeeded or were skipped
+        const totalProcessed = successCount + skippedCount
+        if (totalProcessed > 0) {
+          await fetchCurrentMappings()
           setIsAddDialogOpen(false)
           resetForm()
-          trackDataManagement("create", "data_mapping", {
-            userProperty: formData.userProperty,
-            profileUpdateFunction: formData.profileUpdateFunction,
-            dataSource: formData.dataSource,
-          })
-          trackAPICall(`/api/mappings/${tenant.clientId}/${apiDataSource}`, "POST", true)
+        }
+      } else {
+        // Handle single mapping creation
+        const result = await createSingleMapping(formData.userProperty, apiDataSource, validatedMetadata)
+
+        if (result.success) {
+          await fetchCurrentMappings()
+          setIsAddDialogOpen(false)
+          resetForm()
         } else {
-          console.error("Failed to create mapping:", response.statusText)
-          trackAPICall(`/api/mappings/${tenant.clientId}/${apiDataSource}`, "POST", false)
+          setErrorMessage(result.error || "Failed to create mapping")
           trackFormInteraction("add", "data_mapping", "error")
-          trackError("api_error", `Failed to create mapping: ${response.statusText}`, "data-mappings-manager")
+          trackError("api_error", `Failed to create mapping: ${result.error}`, "data-mappings-manager")
         }
       }
     } catch (error) {
       console.error("Error saving mapping:", error)
+      setErrorMessage(error instanceof Error ? error.message : "An unexpected error occurred")
       trackFormInteraction(editingMapping ? "edit" : "add", "data_mapping", "error")
       trackError("network_error", `Error saving mapping: ${error}`, "data-mappings-manager")
     } finally {
@@ -443,6 +966,7 @@ export const DataMappingsManager = ({ tenant, onAuthExpired }: DataMappingsManag
 
     setFormData({
       userProperty: mapping.UserProperty || "",
+      userProperties: "",
       profileUpdateFunction: mapping.ProfileUpdateFunction || "UPDATE",
       isMandatory: mapping.IsMandatory || false,
       metadata: metadataString,
@@ -456,7 +980,10 @@ export const DataMappingsManager = ({ tenant, onAuthExpired }: DataMappingsManag
 
   const handleDelete = async (userProperty: string) => {
     setLoading(true)
-    const apiDataSource = getApiDataSource(selectedDataSource)
+    const currentDataSource = selectedOfflineDataSource || selectedDataSource
+    const isOfflineDataSource = !!selectedOfflineDataSource
+    const apiDataSource = isOfflineDataSource ? currentDataSource : getApiDataSource(selectedDataSource)
+
     try {
       const response = await fetch(`/api/mappings/${tenant.clientId}/${apiDataSource}/${userProperty}/delete`, {
         method: "DELETE",
@@ -468,10 +995,10 @@ export const DataMappingsManager = ({ tenant, onAuthExpired }: DataMappingsManag
       })
 
       if (response.ok) {
-        await fetchMappings(selectedDataSource)
+        await fetchCurrentMappings()
         trackDataManagement("delete", "data_mapping", {
           userProperty,
-          dataSource: selectedDataSource,
+          dataSource: currentDataSource,
         })
         trackAPICall(`/api/mappings/${tenant.clientId}/${apiDataSource}/${userProperty}/delete`, "DELETE", true)
       } else {
@@ -522,11 +1049,28 @@ export const DataMappingsManager = ({ tenant, onAuthExpired }: DataMappingsManag
     }
   }
 
+  const currentDataSource = selectedOfflineDataSource || selectedDataSource
+  // For filtering, we need to use the API data source name to match what's returned from the API
+  const currentApiDataSource = selectedOfflineDataSource
+    ? selectedOfflineDataSource
+    : getApiDataSource(selectedDataSource)
+
+  console.log("Data Mappings Filtering Debug:", {
+    selectedDataSource,
+    selectedOfflineDataSource,
+    currentDataSource,
+    currentApiDataSource,
+    totalMappings: mappings.length,
+    mappingDataSources: mappings.map(m => m.DataSourceName),
+    uniqueDataSources: Array.from(new Set(mappings.map(m => m.DataSourceName))),
+  })
+
   const filteredMappings = mappings.filter(
     mapping =>
-      (mapping.UserProperty?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
-      (mapping.ProfileUpdateFunction?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
-      searchInMetadata(mapping.Metadata || "", searchTerm),
+      mapping.DataSourceName === currentApiDataSource &&
+      ((mapping.UserProperty?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
+        (mapping.ProfileUpdateFunction?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
+        searchInMetadata(mapping.Metadata || "", searchTerm)),
   )
 
   const totalPages = Math.ceil(filteredMappings.length / pageSize)
@@ -558,7 +1102,7 @@ export const DataMappingsManager = ({ tenant, onAuthExpired }: DataMappingsManag
         <div className="flex gap-2">
           <Button
             variant="outline"
-            onClick={() => fetchMappings(selectedDataSource)}
+            onClick={() => fetchCurrentMappings()}
             disabled={loading}
             className="flex items-center gap-2">
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
@@ -568,8 +1112,11 @@ export const DataMappingsManager = ({ tenant, onAuthExpired }: DataMappingsManag
             open={isAddDialogOpen}
             onOpenChange={open => {
               setIsAddDialogOpen(open)
-              if (open && userProperties.length === 0) {
-                fetchUserProperties()
+              if (open) {
+                resetForm() // Set default data source to current tab
+                if (userProperties.length === 0) {
+                  fetchUserProperties()
+                }
               }
             }}>
             <DialogTrigger asChild>
@@ -582,70 +1129,222 @@ export const DataMappingsManager = ({ tenant, onAuthExpired }: DataMappingsManag
               <DialogHeader>
                 <DialogTitle>Add New Data Mapping</DialogTitle>
               </DialogHeader>
+              {successMessage && (
+                <Alert className="border-green-200 bg-green-50">
+                  <CheckCircle className="h-4 w-4 text-green-600" />
+                  <AlertDescription className="pr-8 text-green-700">{successMessage}</AlertDescription>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="absolute top-2 right-2 h-6 w-6 p-0 text-green-600 hover:text-green-700"
+                    onClick={() => setSuccessMessage(null)}>
+                    ×
+                  </Button>
+                </Alert>
+              )}
+              {errorMessage && (
+                <Alert className="border-red-200 bg-red-50">
+                  <AlertCircle className="h-4 w-4 text-red-600" />
+                  <AlertDescription className="pr-8 text-red-700">{errorMessage}</AlertDescription>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="absolute top-2 right-2 h-6 w-6 p-0 text-red-600 hover:text-red-700"
+                    onClick={() => setErrorMessage(null)}>
+                    ×
+                  </Button>
+                </Alert>
+              )}
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="grid gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="dataSource">Data Source</Label>
                     <Select
                       value={formData.dataSource}
-                      onValueChange={value => setFormData(prev => ({ ...prev, dataSource: value as DataSource }))}>
+                      onValueChange={value => setFormData(prev => ({ ...prev, dataSource: value }))}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="analyze_post">Web SDK</SelectItem>
                         <SelectItem value="dataingestionpi">Data Ingestion API</SelectItem>
+                        {offlineDataSources
+                          .filter(ds => ds.isActive === 1)
+                          .map(dataSource => (
+                            <SelectItem key={dataSource.name} value={dataSource.name}>
+                              <div className="flex items-center gap-2">
+                                <FileUp className="h-4 w-4" />
+                                {dataSource.name}
+                              </div>
+                            </SelectItem>
+                          ))}
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="userProperty">User Property</Label>
-                    <Popover open={propertySearchOpen} onOpenChange={setPropertySearchOpen}>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          role="combobox"
-                          aria-expanded={propertySearchOpen}
-                          className="w-full justify-between">
-                          {formData.userProperty ||
-                            (loadingProperties
-                              ? "Loading properties..."
-                              : userProperties.length === 0
-                              ? "No properties available"
-                              : "Select a user property")}
-                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-full p-0">
-                        <Command>
-                          <CommandInput placeholder="Search properties..." />
-                          <CommandList>
-                            <CommandEmpty>No properties found.</CommandEmpty>
-                            <CommandGroup>
-                              {userProperties.map(property => (
-                                <CommandItem
-                                  key={property}
-                                  value={property}
-                                  onSelect={currentValue => {
-                                    setFormData(prev => ({
-                                      ...prev,
-                                      userProperty: currentValue === formData.userProperty ? "" : currentValue,
-                                    }))
-                                    setPropertySearchOpen(false)
-                                  }}>
-                                  <Check
-                                    className={`mr-2 h-4 w-4 ${
-                                      formData.userProperty === property ? "opacity-100" : "opacity-0"
-                                    }`}
-                                  />
-                                  {property}
-                                </CommandItem>
-                              ))}
-                            </CommandGroup>
-                          </CommandList>
-                        </Command>
-                      </PopoverContent>
-                    </Popover>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="userProperty">User Properties</Label>
+                      <div className="flex items-center space-x-2">
+                        <Label htmlFor="bulk-mode" className="text-sm font-normal">
+                          Bulk Mode
+                        </Label>
+                        <Switch
+                          id="bulk-mode"
+                          checked={isBulkMode}
+                          onCheckedChange={checked => {
+                            setIsBulkMode(checked)
+                            if (checked) {
+                              // Clear single property when switching to bulk
+                              setFormData(prev => ({ ...prev, userProperty: "" }))
+                              setPropertySearchOpen(false)
+                            } else {
+                              // Clear bulk properties when switching to single
+                              setFormData(prev => ({ ...prev, userProperties: "" }))
+                            }
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {isBulkMode ? (
+                      <div className="space-y-2">
+                        <Textarea
+                          placeholder="Enter property names, one per line:&#10;customerAge&#10;customerStatus&#10;purchaseHistory"
+                          value={formData.userProperties}
+                          onChange={e => setFormData(prev => ({ ...prev, userProperties: e.target.value }))}
+                          className="min-h-24"
+                        />
+                        <p className="text-xs text-slate-500">
+                          Each property will automatically get an input column of "properties__&lt;property_name&gt;"
+                        </p>
+                        {formData.userProperties.split("\n").filter(name => name.trim()).length > 0 && (
+                          <div className="bg-blue-50 border border-blue-200 rounded-md p-2">
+                            <p className="text-sm text-blue-700">
+                              <span className="font-medium">
+                                {formData.userProperties.split("\n").filter(name => name.trim()).length} properties
+                              </span>{" "}
+                              will be created with:
+                            </p>
+                            <ul className="text-xs text-blue-600 mt-1 ml-4 list-disc">
+                              <li>Update Function: {formData.profileUpdateFunction}</li>
+                              <li>Mandatory: {formData.isMandatory ? "Yes" : "No"}</li>
+                              <li>Auto-generated input columns</li>
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <Popover open={propertySearchOpen} onOpenChange={setPropertySearchOpen}>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            aria-expanded={propertySearchOpen}
+                            className="w-full justify-between">
+                            {formData.userProperty ||
+                              (loadingProperties
+                                ? "Loading properties..."
+                                : userProperties.length === 0
+                                ? "No properties available"
+                                : "Select a user property")}
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-full p-0">
+                          <Command>
+                            <CommandInput
+                              placeholder="Search or type new property name..."
+                              value={formData.userProperty}
+                              onValueChange={value => {
+                                setFormData(prev => ({
+                                  ...prev,
+                                  userProperty: value,
+                                }))
+                                // Auto-update input column if it's empty or follows the default pattern
+                                const currentInputCol = getInputColFromMetadata()
+                                if (
+                                  !currentInputCol ||
+                                  currentInputCol === "properties__" ||
+                                  currentInputCol.startsWith("properties__")
+                                ) {
+                                  setInputColInMetadata(value ? `properties__${value}` : "properties__")
+                                }
+                              }}
+                            />
+                            <CommandList>
+                              {userProperties.length === 0 && !loadingProperties ? (
+                                <CommandEmpty>
+                                  {formData.userProperty ? (
+                                    <div className="p-2">
+                                      <p className="text-sm text-muted-foreground">No existing properties found.</p>
+                                      <p className="text-xs text-green-600 mt-1">
+                                        Press Enter or click outside to create "{formData.userProperty}" as a new
+                                        property
+                                      </p>
+                                    </div>
+                                  ) : (
+                                    "No properties available."
+                                  )}
+                                </CommandEmpty>
+                              ) : (
+                                <>
+                                  <CommandEmpty>
+                                    {formData.userProperty && !userProperties.includes(formData.userProperty) ? (
+                                      <div className="p-2">
+                                        <p className="text-sm text-muted-foreground">No matching properties found.</p>
+                                        <p className="text-xs text-green-600 mt-1">
+                                          Press Enter or click outside to create "{formData.userProperty}" as a new
+                                          property
+                                        </p>
+                                      </div>
+                                    ) : (
+                                      "No properties found."
+                                    )}
+                                  </CommandEmpty>
+                                  <CommandGroup>
+                                    {userProperties.map(property => (
+                                      <CommandItem
+                                        key={property}
+                                        value={property}
+                                        onSelect={currentValue => {
+                                          setFormData(prev => ({
+                                            ...prev,
+                                            userProperty: currentValue,
+                                          }))
+                                          // Set default input column to properties__<property_name>
+                                          setInputColInMetadata(`properties__${currentValue}`)
+                                          setPropertySearchOpen(false)
+                                        }}>
+                                        <Check
+                                          className={`mr-2 h-4 w-4 ${
+                                            formData.userProperty === property ? "opacity-100" : "opacity-0"
+                                          }`}
+                                        />
+                                        {property}
+                                      </CommandItem>
+                                    ))}
+                                  </CommandGroup>
+                                </>
+                              )}
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
+                    )}
+
+                    {!isBulkMode && formData.userProperty.trim() && !userProperties.includes(formData.userProperty) && (
+                      <div className="bg-green-50 border border-green-200 rounded-md p-2 mt-2">
+                        <p className="text-sm text-green-700">
+                          <span className="font-medium">New property:</span> "{formData.userProperty}" will be created
+                          with:
+                        </p>
+                        <ul className="text-xs text-green-600 mt-1 ml-4 list-disc">
+                          <li>Data Type: STRING</li>
+                          <li>Preference: none</li>
+                          <li>Priority: 1</li>
+                        </ul>
+                      </div>
+                    )}
                     {userProperties.length === 0 && !loadingProperties && (
                       <p className="text-sm text-slate-500">No user properties found. Create user properties first.</p>
                     )}
@@ -679,102 +1378,104 @@ export const DataMappingsManager = ({ tenant, onAuthExpired }: DataMappingsManag
                     </div>
                     <p className="text-xs text-amber-600">Note: This setting cannot be changed via API at this time</p>
                   </div>
-                  <div className="space-y-2">
-                    <Label>Metadata Configuration</Label>
-                    <div className="space-y-3 p-4 border rounded-lg bg-slate-50">
-                      <div className="space-y-2">
-                        <Label htmlFor="inputCol" className="text-sm font-medium">
-                          Input Column *
-                        </Label>
-                        <Input
-                          id="inputCol"
-                          value={getInputColFromMetadata()}
-                          onChange={e => setInputColInMetadata(e.target.value)}
-                          placeholder="e.g., properties__customer_id"
-                          className="bg-white"
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <Label className="text-sm font-medium">Alternate Keys</Label>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={addAlternateKey}
-                            className="h-7 px-2 text-xs">
-                            <Plus className="h-3 w-3 mr-1" />
-                            Add
-                          </Button>
-                        </div>
+                  {!isBulkMode && (
+                    <div className="space-y-2">
+                      <Label>Metadata Configuration</Label>
+                      <div className="space-y-3 p-4 border rounded-lg bg-slate-50">
                         <div className="space-y-2">
-                          {formData.alternateKeys.map((key, index) => (
-                            <div key={index} className="flex items-center space-x-2">
-                              <Input
-                                value={key}
-                                onChange={e => updateAlternateKey(index, e.target.value)}
-                                placeholder="Alternate key"
-                                className="bg-white"
-                              />
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => removeAlternateKey(index)}
-                                className="h-8 w-8 p-0 flex-shrink-0">
-                                <X className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          ))}
+                          <Label htmlFor="inputCol" className="text-sm font-medium">
+                            Input Column *
+                          </Label>
+                          <Input
+                            id="inputCol"
+                            value={getInputColFromMetadata()}
+                            onChange={e => setInputColInMetadata(e.target.value)}
+                            placeholder="e.g., properties__customer_id"
+                            className="bg-white"
+                          />
                         </div>
-                      </div>
 
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <Label className="text-sm font-medium">Additional Metadata (Optional)</Label>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={addCustomMetadata}
-                            className="h-7 px-2 text-xs">
-                            <Plus className="h-3 w-3 mr-1" />
-                            Add Field
-                          </Button>
-                        </div>
-                        <p className="text-xs text-slate-500">
-                          For object values, use JSON format: {"{"}"key":"value"{"}"}
-                        </p>
                         <div className="space-y-2">
-                          {formData.customMetadata.map((item, index) => (
-                            <div key={index} className="flex items-center space-x-2">
-                              <Input
-                                value={item.key}
-                                onChange={e => updateCustomMetadata(index, "key", e.target.value)}
-                                placeholder="Key (e.g., preprocessor_function)"
-                                className="bg-white"
-                              />
-                              <Input
-                                value={item.value}
-                                onChange={e => updateCustomMetadata(index, "value", e.target.value)}
-                                placeholder='Value (e.g., "true" or {"is_milli":"true"})'
-                                className="bg-white"
-                              />
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => removeCustomMetadata(index)}
-                                className="h-8 w-8 p-0 flex-shrink-0">
-                                <X className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          ))}
+                          <div className="flex items-center justify-between">
+                            <Label className="text-sm font-medium">Alternate Keys</Label>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={addAlternateKey}
+                              className="h-7 px-2 text-xs">
+                              <Plus className="h-3 w-3 mr-1" />
+                              Add
+                            </Button>
+                          </div>
+                          <div className="space-y-2">
+                            {formData.alternateKeys.map((key, index) => (
+                              <div key={index} className="flex items-center space-x-2">
+                                <Input
+                                  value={key}
+                                  onChange={e => updateAlternateKey(index, e.target.value)}
+                                  placeholder="Alternate key"
+                                  className="bg-white"
+                                />
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => removeAlternateKey(index)}
+                                  className="h-8 w-8 p-0 flex-shrink-0">
+                                  <X className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-sm font-medium">Additional Metadata (Optional)</Label>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={addCustomMetadata}
+                              className="h-7 px-2 text-xs">
+                              <Plus className="h-3 w-3 mr-1" />
+                              Add Field
+                            </Button>
+                          </div>
+                          <p className="text-xs text-slate-500">
+                            For object values, use JSON format: {"{"}"key":"value"{"}"}
+                          </p>
+                          <div className="space-y-2">
+                            {formData.customMetadata.map((item, index) => (
+                              <div key={index} className="flex items-center space-x-2">
+                                <Input
+                                  value={item.key}
+                                  onChange={e => updateCustomMetadata(index, "key", e.target.value)}
+                                  placeholder="Key (e.g., preprocessor_function)"
+                                  className="bg-white"
+                                />
+                                <Input
+                                  value={item.value}
+                                  onChange={e => updateCustomMetadata(index, "value", e.target.value)}
+                                  placeholder='Value (e.g., "true" or {"is_milli":"true"})'
+                                  className="bg-white"
+                                />
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => removeCustomMetadata(index)}
+                                  className="h-8 w-8 p-0 flex-shrink-0">
+                                  <X className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
+                  )}
                 </div>
                 <div className="flex justify-end gap-2">
                   <Button
@@ -787,7 +1488,18 @@ export const DataMappingsManager = ({ tenant, onAuthExpired }: DataMappingsManag
                     Cancel
                   </Button>
                   <Button type="submit" disabled={loading}>
-                    {loading ? "Saving..." : "Create"} Mapping
+                    {loading
+                      ? "Saving..."
+                      : (() => {
+                          if (isBulkMode) {
+                            const propertyCount = formData.userProperties.split("\n").filter(name => name.trim()).length
+                            return propertyCount > 1 ? `Create ${propertyCount} Mappings` : "Create Mapping"
+                          } else {
+                            return !userProperties.includes(formData.userProperty) && formData.userProperty.trim()
+                              ? "Create Property & Mapping"
+                              : "Create Mapping"
+                          }
+                        })()}
                   </Button>
                 </div>
               </form>
@@ -796,32 +1508,97 @@ export const DataMappingsManager = ({ tenant, onAuthExpired }: DataMappingsManag
         </div>
       </div>
 
-      <Tabs
-        value={selectedDataSource}
-        onValueChange={value => {
-          const newDataSource = value as DataSource
-          setSelectedDataSource(newDataSource)
-          trackDetailedUserAction("view", "data_mappings", { dataSource: newDataSource })
-        }}>
-        <TabsList className="grid w-full grid-cols-2 max-w-md">
-          <TabsTrigger value="analyze_post" className="flex items-center gap-2">
-            <Database className="h-4 w-4" />
-            Web SDK
-          </TabsTrigger>
-          <TabsTrigger value="dataingestionpi" className="flex items-center gap-2">
-            <Database className="h-4 w-4" />
-            Data Ingestion API
-          </TabsTrigger>
-        </TabsList>
+      <div className="space-y-4">
+        <div className="flex flex-wrap gap-2 mb-4">
+          {/* Standard Data Sources */}
+          <div className="inline-flex h-10 items-center justify-center rounded-md bg-muted p-1 text-muted-foreground">
+            <button
+              className={`inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 gap-2 ${
+                selectedDataSource === "analyze_post" && !selectedOfflineDataSource
+                  ? "bg-background text-foreground shadow-sm"
+                  : ""
+              }`}
+              onClick={() => {
+                setSelectedDataSource("analyze_post")
+                setSelectedOfflineDataSource(null)
+                trackDetailedUserAction("view", "data_mappings", { dataSource: "analyze_post" })
+              }}>
+              <Braces className="h-4 w-4" />
+              Web SDK
+            </button>
+            <button
+              className={`inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 gap-2 ${
+                selectedDataSource === "dataingestionpi" && !selectedOfflineDataSource
+                  ? "bg-background text-foreground shadow-sm"
+                  : ""
+              }`}
+              onClick={() => {
+                setSelectedDataSource("dataingestionpi")
+                setSelectedOfflineDataSource(null)
+                trackDetailedUserAction("view", "data_mappings", { dataSource: "dataingestionpi" })
+              }}>
+              <Database className="h-4 w-4" />
+              Data Ingestion API
+            </button>
+          </div>
 
-        <TabsContent value={selectedDataSource} className="space-y-4">
+          {/* Offline Data Sources Loading */}
+          {offlineDataSourcesLoading && (
+            <div className="inline-flex h-10 items-center justify-center rounded-md bg-muted p-1 text-muted-foreground">
+              <div className="px-3 py-1.5 text-sm">Loading offline sources...</div>
+            </div>
+          )}
+
+          {/* Offline Data Sources */}
+          {offlineDataSources.length > 0 &&
+            offlineDataSources
+              .filter(ds => ds.isActive === 1)
+              .map(dataSource => (
+                <div
+                  key={dataSource.name}
+                  className="inline-flex h-10 items-center justify-center rounded-md bg-muted p-1 text-muted-foreground">
+                  <button
+                    className={`inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 gap-2 ${
+                      selectedOfflineDataSource === dataSource.name ? "bg-background text-foreground shadow-sm" : ""
+                    }`}
+                    onClick={() => {
+                      console.log("Offline data source tab clicked:", {
+                        dataSourceName: dataSource.name,
+                        hasToken: !!coreApiToken,
+                      })
+                      if (!coreApiToken) {
+                        setShowCoreApiCredentials(true)
+                        return
+                      }
+                      setSelectedOfflineDataSource(dataSource.name)
+                      setSelectedDataSource("analyze_post") // Reset standard selection
+                      trackDetailedUserAction("view", "offline_data_mappings", { dataSource: dataSource.name })
+                    }}>
+                    <FileUp className="h-4 w-4" />
+                    {dataSource.name}
+                  </button>
+                </div>
+              ))}
+        </div>
+
+        {/* Dynamic Content Based on Selection */}
+        <div className="space-y-4">
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle className="flex items-center gap-2">
-                  <MapPin className="h-5 w-5" />
-                  {selectedDataSource === "analyze_post" ? "Web SDK" : "Data Ingestion API"} Mappings (
-                  {filteredMappings.length} total)
+                  {selectedOfflineDataSource ? (
+                    <>
+                      <FileUp className="h-5 w-5" />
+                      {selectedOfflineDataSource} Mappings ({filteredMappings.length} total)
+                    </>
+                  ) : (
+                    <>
+                      <MapPin className="h-5 w-5" />
+                      {selectedDataSource === "analyze_post" ? "Web SDK" : "Data Ingestion API"} Mappings (
+                      {filteredMappings.length} total)
+                    </>
+                  )}
                 </CardTitle>
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-2">
@@ -1071,8 +1848,8 @@ export const DataMappingsManager = ({ tenant, onAuthExpired }: DataMappingsManag
               )}
             </CardContent>
           </Card>
-        </TabsContent>
-      </Tabs>
+        </div>
+      </div>
 
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="sm:max-w-2xl">
@@ -1242,6 +2019,54 @@ export const DataMappingsManager = ({ tenant, onAuthExpired }: DataMappingsManag
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Core API Credentials Dialog */}
+      <Dialog open={showCoreApiCredentials} onOpenChange={setShowCoreApiCredentials}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Core API Credentials</DialogTitle>
+            <div className="text-sm text-muted-foreground">
+              Enter your Core API credentials to access offline data sources
+            </div>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="core-username">Username</Label>
+              <Input
+                id="core-username"
+                value={coreApiCredentials.username}
+                onChange={e => setCoreApiCredentials(prev => ({ ...prev, username: e.target.value }))}
+                placeholder="Enter your username"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="core-password">Password</Label>
+              <Input
+                id="core-password"
+                type="password"
+                value={coreApiCredentials.password}
+                onChange={e => setCoreApiCredentials(prev => ({ ...prev, password: e.target.value }))}
+                placeholder="Enter your password"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowCoreApiCredentials(false)
+                  setCoreApiCredentials({ username: "", password: "" })
+                }}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleCoreApiCredentialsSubmit}
+                disabled={!coreApiCredentials.username || !coreApiCredentials.password}>
+                Authenticate
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

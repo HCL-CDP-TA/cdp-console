@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -30,7 +31,7 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Plus, Edit2, Trash2, Database, RefreshCw, Search, AlertCircle } from "lucide-react"
+import { Plus, Edit2, Trash2, Database, RefreshCw, Search, AlertCircle, CheckCircle, UserCog } from "lucide-react"
 import { Tenant, UserProperty } from "@/types/tenant"
 import { validateAuthState } from "@/lib/auth"
 import {
@@ -56,10 +57,11 @@ export const UserPropertiesManager = ({ tenant, onAuthExpired }: UserPropertiesM
   const [editingProperty, setEditingProperty] = useState<UserProperty | null>(null)
   const [authError, setAuthError] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
   const [formData, setFormData] = useState({
-    dmpDataPointCode: "",
+    propertyNames: "",
     dataType: "STRING",
     preference: "none",
     priority: 1,
@@ -149,7 +151,7 @@ export const UserPropertiesManager = ({ tenant, onAuthExpired }: UserPropertiesM
 
   const resetForm = () => {
     setFormData({
-      dmpDataPointCode: "",
+      propertyNames: "",
       dataType: "STRING",
       preference: "none",
       priority: 1,
@@ -165,56 +167,171 @@ export const UserPropertiesManager = ({ tenant, onAuthExpired }: UserPropertiesM
     trackFormInteraction(formType, "user_property", "submit")
 
     try {
-      const payload = {
-        tenantId: tenant.clientId,
-        userProperty: formData.dmpDataPointCode,
-        dataType: formData.dataType,
-        preference: formData.preference,
-        priority: formData.priority,
-      }
-
-      const url = editingProperty
-        ? `/api/user-properties/${tenant.clientId}/${editingProperty.userProperty}`
-        : `/api/user-properties/${tenant.clientId}`
-
-      const method = editingProperty ? "PUT" : "POST"
-
-      const response = await fetch(url, {
-        method,
-        headers: {
-          "x-api-key": tenant.apiKey,
-          "x-api-endpoint": tenant.apiEndpoint,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      })
-
-      if (response.ok) {
-        await fetchProperties()
-        setIsAddDialogOpen(false)
-        setIsEditDialogOpen(false)
-        setEditingProperty(null)
-        resetForm()
-
-        // Track successful operation
-        trackDataManagement(editingProperty ? "update" : "create", "user_property", {
-          propertyName: formData.dmpDataPointCode,
+      if (editingProperty) {
+        // Handle editing single property (existing functionality)
+        const payload = {
+          tenantId: tenant.clientId,
+          userProperty: formData.propertyNames, // Will be single property name for edit
           dataType: formData.dataType,
           preference: formData.preference,
+          priority: formData.priority,
+        }
+
+        const url = `/api/user-properties/${tenant.clientId}/${editingProperty.userProperty}`
+        const response = await fetch(url, {
+          method: "PUT",
+          headers: {
+            "x-api-key": tenant.apiKey,
+            "x-api-endpoint": tenant.apiEndpoint,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
         })
-        trackAPICall(url, method, true)
-        resetForm()
+
+        if (response.ok) {
+          await fetchProperties()
+          setIsEditDialogOpen(false)
+          setEditingProperty(null)
+          resetForm()
+
+          trackDataManagement("update", "user_property", {
+            propertyName: formData.propertyNames,
+            dataType: formData.dataType,
+            preference: formData.preference,
+          })
+          trackAPICall(url, "PUT", true)
+        } else {
+          console.error("Failed to update property:", response.statusText)
+          trackAPICall(url, "PUT", false)
+          trackFormInteraction("edit", "user_property", "error")
+          trackError("api_error", `Failed to update property: ${response.statusText}`, "user-properties-manager")
+        }
       } else {
-        console.error("Failed to save property:", response.statusText)
-        trackAPICall(url, method, false)
-        trackFormInteraction(editingProperty ? "edit" : "add", "user_property", "error")
-        trackError("api_error", `Failed to save property: ${response.statusText}`, "user-properties-manager")
+        // Handle creating multiple properties
+        const propertyNames = formData.propertyNames
+          .split("\n")
+          .map(name => name.trim())
+          .filter(name => name.length > 0)
+
+        if (propertyNames.length === 0) {
+          setErrorMessage("Please enter at least one property name")
+          return
+        }
+
+        console.log(`Creating ${propertyNames.length} properties:`, propertyNames)
+
+        let successCount = 0
+        let skippedCount = 0
+        let failureCount = 0
+        const skippedProperties: string[] = []
+        const failedProperties: string[] = []
+
+        // Create each property
+        for (const propertyName of propertyNames) {
+          try {
+            const payload = {
+              tenantId: tenant.clientId,
+              userProperty: propertyName,
+              dataType: formData.dataType,
+              preference: formData.preference,
+              priority: formData.priority,
+            }
+
+            const response = await fetch(`/api/user-properties/${tenant.clientId}`, {
+              method: "POST",
+              headers: {
+                "x-api-key": tenant.apiKey,
+                "x-api-endpoint": tenant.apiEndpoint,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify(payload),
+            })
+
+            if (response.ok) {
+              successCount++
+              console.log(`Successfully created property: ${propertyName}`)
+              trackDataManagement("create", "user_property", {
+                propertyName,
+                dataType: formData.dataType,
+                preference: formData.preference,
+              })
+              trackAPICall(`/api/user-properties/${tenant.clientId}`, "POST", true)
+            } else {
+              // Check if it's a "property already exists" error
+              let errorData
+              try {
+                errorData = await response.json()
+              } catch {
+                errorData = { error: response.statusText }
+              }
+
+              const errorMessage = errorData.message || errorData.error || response.statusText
+              const isAlreadyExists =
+                errorMessage.toLowerCase().includes("already exists") ||
+                errorMessage.toLowerCase().includes("duplicate") ||
+                errorMessage.includes("already exists for Tenant") ||
+                response.status === 409 // Conflict status code
+
+              if (isAlreadyExists) {
+                skippedCount++
+                skippedProperties.push(propertyName)
+                console.log(`Property already exists, skipping: ${propertyName}`)
+                // Track as success since the property exists (which is the desired end state)
+                trackAPICall(`/api/user-properties/${tenant.clientId}`, "POST", true)
+              } else {
+                failureCount++
+                failedProperties.push(propertyName)
+                console.error(`Failed to create property ${propertyName}:`, errorMessage)
+                trackAPICall(`/api/user-properties/${tenant.clientId}`, "POST", false)
+              }
+            }
+          } catch (error) {
+            failureCount++
+            failedProperties.push(propertyName)
+            console.error(`Error creating property ${propertyName}:`, error)
+          }
+        }
+
+        // Show results summary - only show actual failures, not skipped duplicates
+        if (successCount > 0 || skippedCount > 0) {
+          let successMsg = ""
+          if (successCount > 0 && skippedCount > 0) {
+            successMsg = `Created ${successCount} new properties and skipped ${skippedCount} existing properties`
+          } else if (successCount > 0) {
+            successMsg = `Successfully created ${successCount} ${successCount === 1 ? "property" : "properties"}`
+          } else if (skippedCount > 0) {
+            successMsg = `All ${skippedCount} ${skippedCount === 1 ? "property" : "properties"} already exist`
+          }
+
+          console.log(successMsg)
+          setSuccessMessage(successMsg)
+          setErrorMessage(null) // Clear any previous errors
+        }
+
+        if (skippedCount > 0) {
+          console.log(`Skipped ${skippedCount} properties that already exist: ${skippedProperties.join(", ")}`)
+        }
+
+        if (failureCount > 0) {
+          const errorMsg = `Failed to create ${failureCount} properties: ${failedProperties.join(", ")}`
+          setErrorMessage(errorMsg)
+          setSuccessMessage(null) // Clear any success message if there are failures
+          trackFormInteraction("add", "user_property", "error")
+        }
+
+        // Refresh the properties list and close dialog if any succeeded or were skipped
+        const totalProcessed = successCount + skippedCount
+        if (totalProcessed > 0) {
+          await fetchProperties()
+          setIsAddDialogOpen(false)
+          resetForm()
+        }
       }
     } catch (error) {
-      console.error("Error saving property:", error)
-      trackAPICall("/api/user-properties", editingProperty ? "PUT" : "POST", false)
+      console.error("Error in handleSubmit:", error)
       trackFormInteraction(editingProperty ? "edit" : "add", "user_property", "error")
       trackError("network_error", `Error saving property: ${error}`, "user-properties-manager")
+      setErrorMessage(error instanceof Error ? error.message : "An unexpected error occurred")
     } finally {
       setLoading(false)
     }
@@ -228,7 +345,7 @@ export const UserPropertiesManager = ({ tenant, onAuthExpired }: UserPropertiesM
     })
     setEditingProperty(property)
     setFormData({
-      dmpDataPointCode: property.dmpDataPointCode,
+      propertyNames: property.dmpDataPointCode,
       dataType: property.dataType,
       preference: property.preference,
       priority: property.priority,
@@ -337,6 +454,7 @@ export const UserPropertiesManager = ({ tenant, onAuthExpired }: UserPropertiesM
             onOpenChange={open => {
               if (open) {
                 setErrorMessage(null) // Clear errors when opening dialog
+                setSuccessMessage(null) // Clear success messages when opening dialog
                 trackFormInteraction("add", "user_property", "open")
               }
               setIsAddDialogOpen(open)
@@ -344,24 +462,55 @@ export const UserPropertiesManager = ({ tenant, onAuthExpired }: UserPropertiesM
             <DialogTrigger asChild>
               <Button className="flex items-center gap-2">
                 <Plus className="h-4 w-4" />
-                Add Property
+                Add Properties
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-lg">
               <DialogHeader>
-                <DialogTitle>Add New User Property</DialogTitle>
+                <DialogTitle>Add New User Properties</DialogTitle>
               </DialogHeader>
+              {successMessage && (
+                <Alert className="border-green-200 bg-green-50">
+                  <CheckCircle className="h-4 w-4 text-green-600" />
+                  <AlertDescription className="pr-8 text-green-700">{successMessage}</AlertDescription>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="absolute top-2 right-2 h-6 w-6 p-0 text-green-600 hover:text-green-700"
+                    onClick={() => setSuccessMessage(null)}>
+                    ×
+                  </Button>
+                </Alert>
+              )}
+              {errorMessage && (
+                <Alert className="border-red-200 bg-red-50">
+                  <AlertCircle className="h-4 w-4 text-red-600" />
+                  <AlertDescription className="pr-8 text-red-700">{errorMessage}</AlertDescription>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="absolute top-2 right-2 h-6 w-6 p-0 text-red-600 hover:text-red-700"
+                    onClick={() => setErrorMessage(null)}>
+                    ×
+                  </Button>
+                </Alert>
+              )}
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="grid gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="dmpDataPointCode">Property Name</Label>
-                    <Input
-                      id="dmpDataPointCode"
-                      value={formData.dmpDataPointCode}
-                      onChange={e => setFormData(prev => ({ ...prev, dmpDataPointCode: e.target.value }))}
-                      placeholder="Enter property name"
+                    <Label htmlFor="propertyNames">Property Names</Label>
+                    <Textarea
+                      id="propertyNames"
+                      value={formData.propertyNames}
+                      onChange={e => setFormData(prev => ({ ...prev, propertyNames: e.target.value }))}
+                      placeholder="Enter property names, one per line&#10;Example:&#10;customer_id&#10;email_address&#10;phone_number"
+                      rows={5}
                       required
                     />
+                    <p className="text-sm text-muted-foreground">
+                      Enter one property name per line. All properties will be created with the same data type,
+                      preference, and priority settings below.
+                    </p>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
@@ -429,7 +578,12 @@ export const UserPropertiesManager = ({ tenant, onAuthExpired }: UserPropertiesM
                     Cancel
                   </Button>
                   <Button type="submit" disabled={loading}>
-                    {loading ? "Saving..." : "Create"} Property
+                    {loading
+                      ? "Saving..."
+                      : (() => {
+                          const propertyCount = formData.propertyNames.split("\n").filter(name => name.trim()).length
+                          return propertyCount > 1 ? `Create ${propertyCount} Properties` : "Create Property"
+                        })()}
                   </Button>
                 </div>
               </form>
@@ -437,6 +591,20 @@ export const UserPropertiesManager = ({ tenant, onAuthExpired }: UserPropertiesM
           </Dialog>
         </div>
       </div>
+
+      {successMessage && (
+        <Alert className="relative border-green-200 bg-green-50">
+          <CheckCircle className="h-4 w-4 text-green-600" />
+          <AlertDescription className="pr-8 text-green-700">{successMessage}</AlertDescription>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="absolute top-2 right-2 h-6 w-6 p-0 text-green-600 hover:text-green-700"
+            onClick={() => setSuccessMessage(null)}>
+            ×
+          </Button>
+        </Alert>
+      )}
 
       {errorMessage && (
         <Alert variant="destructive" className="relative">
@@ -456,7 +624,7 @@ export const UserPropertiesManager = ({ tenant, onAuthExpired }: UserPropertiesM
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2">
-              <Database className="h-5 w-5" />
+              <UserCog className="h-5 w-5" />
               Properties ({filteredProperties.length} total)
             </CardTitle>
             <div className="flex items-center gap-4">
@@ -652,6 +820,7 @@ export const UserPropertiesManager = ({ tenant, onAuthExpired }: UserPropertiesM
         onOpenChange={open => {
           if (open) {
             setErrorMessage(null) // Clear errors when opening dialog
+            setSuccessMessage(null) // Clear success messages when opening dialog
             trackFormInteraction("edit", "user_property", "open")
           }
           setIsEditDialogOpen(open)
@@ -666,8 +835,8 @@ export const UserPropertiesManager = ({ tenant, onAuthExpired }: UserPropertiesM
                 <Label htmlFor="edit-dmpDataPointCode">Property Name</Label>
                 <Input
                   id="edit-dmpDataPointCode"
-                  value={formData.dmpDataPointCode}
-                  onChange={e => setFormData(prev => ({ ...prev, dmpDataPointCode: e.target.value }))}
+                  value={formData.propertyNames}
+                  onChange={e => setFormData(prev => ({ ...prev, propertyNames: e.target.value }))}
                   placeholder="Enter property name"
                   required
                   disabled={!!editingProperty}
