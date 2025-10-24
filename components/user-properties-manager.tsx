@@ -31,7 +31,7 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Plus, Edit2, Trash2, Database, RefreshCw, Search, AlertCircle, CheckCircle, UserCog } from "lucide-react"
+import { Plus, Edit2, Trash2, RefreshCw, Search, AlertCircle, CheckCircle, UserCog } from "lucide-react"
 import { Tenant, UserProperty } from "@/types/tenant"
 import { validateAuthState } from "@/lib/auth"
 import {

@@ -20,11 +20,13 @@ import {
   Gauge,
   Star,
   UserCog,
+  Eye,
 } from "lucide-react"
 import { TenantManager } from "@/components/tenant-manager"
 import { TenantSelector } from "@/components/tenant-selector"
 import { UserPropertiesManager } from "@/components/user-properties-manager"
 import { DataMappingsManager } from "@/components/data-mappings-manager"
+import { CustomerOneViewManager } from "@/components/customer-one-view-manager"
 import { trackNavigation, trackTenantSelection, trackAuthentication } from "@/lib/analytics"
 import { ChannelPriority } from "@/components/channel-priority"
 import { Dashboard } from "@/components/dashboard"
@@ -463,6 +465,31 @@ const Home = () => {
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
+                    onClick={() => handleTabChange("customer-one-view")}
+                    disabled={!selectedTenant}
+                    className={`w-full flex items-center ${
+                      isCollapsed ? "justify-center px-2 py-3" : "gap-3 px-3 py-2"
+                    } rounded-lg text-sm font-medium transition-colors ${
+                      activeTab === "customer-one-view"
+                        ? "bg-blue-50 text-blue-700 border border-blue-200"
+                        : selectedTenant
+                        ? "text-slate-700 hover:bg-slate-50"
+                        : "text-slate-400 cursor-not-allowed"
+                    }`}>
+                    <Eye className="h-4 w-4" />
+                    {!isCollapsed && "Customer One View"}
+                  </button>
+                </TooltipTrigger>
+                {isCollapsed && (
+                  <TooltipContent side="right">
+                    <p>Customer One View</p>
+                  </TooltipContent>
+                )}
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
                     onClick={() => handleTabChange("users")}
                     disabled={!selectedTenant}
                     className={`w-full flex items-center ${
@@ -662,6 +689,29 @@ const Home = () => {
                     <MapPin className="h-12 w-12 text-slate-400 mx-auto mb-4" />
                     <h3 className="text-lg font-semibold text-slate-900 mb-2">No Tenant Selected</h3>
                     <p className="text-slate-600 mb-4">Please select a tenant to manage data mappings</p>
+                    <Button onClick={handleBackToTenantSelector}>Select Tenant</Button>
+                  </CardContent>
+                </Card>
+              )}
+            </>
+          )}
+
+          {activeTab === "customer-one-view" && (
+            <>
+              {selectedTenant ? (
+                <CustomerOneViewManager
+                  tenant={selectedTenant}
+                  onAuthExpired={() => {
+                    setIsAuthenticated(false)
+                    setAuthUsername(null)
+                  }}
+                />
+              ) : (
+                <Card>
+                  <CardContent className="p-8 text-center">
+                    <Eye className="h-12 w-12 text-slate-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-slate-900 mb-2">No Tenant Selected</h3>
+                    <p className="text-slate-600 mb-4">Please select a tenant to manage customer one view</p>
                     <Button onClick={handleBackToTenantSelector}>Select Tenant</Button>
                   </CardContent>
                 </Card>
