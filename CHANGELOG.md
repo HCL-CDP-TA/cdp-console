@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.0](https://github.com/HCL-CDP-TA/cdp-console/compare/v0.2.4...v0.3.0) (2025-10-24)
+
+
+### Features
+
+* added Customer One View management ([01ffbfe](https://github.com/HCL-CDP-TA/cdp-console/commit/01ffbfea9a250b13d92da06be95b390dc630526c))
+* added offline data sources, bulk adding properties and bulk adding mappings ([11a32d7](https://github.com/HCL-CDP-TA/cdp-console/commit/11a32d7b1dd42b7a7badc42189e29c14c9ae0431))
+
 ## [0.2.4](https://github.com/HCL-CDP-TA/cdp-console/compare/v0.2.3...v0.2.4) (2025-09-03)
 
 
