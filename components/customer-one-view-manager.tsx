@@ -30,7 +30,19 @@ import {
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from "@dnd-kit/sortable"
 import { useSortable } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import { RefreshCw, Save, Edit2, Trash2, GripVertical, CheckCircle, AlertCircle, Eye, Plus, Check, ChevronsUpDown } from "lucide-react"
+import {
+  RefreshCw,
+  Save,
+  Edit2,
+  Trash2,
+  GripVertical,
+  CheckCircle,
+  AlertCircle,
+  Eye,
+  Plus,
+  Check,
+  ChevronsUpDown,
+} from "lucide-react"
 import { Tenant } from "@/types/tenant"
 import { validateAuthState, getAuthState } from "@/lib/auth"
 import { trackError, trackAPICall, trackUserAction } from "@/lib/analytics"
