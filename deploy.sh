@@ -207,6 +207,7 @@ docker run -d \
     -e NODE_ENV="$NODE_ENV" \
     -e PORT=3000 \
     -e ADMIN_API_URL="${ADMIN_API_URL:-https://adminbackend.dev.hxcd.now.hclsoftware.cloud}" \
+    -e CORE_API_URL="${CORE_API_URL:-https://coreapi.dev.hxcd.now.hclsoftware.cloud}" \
     -e NEXT_PUBLIC_DEFAULT_API_ENDPOINT="${NEXT_PUBLIC_DEFAULT_API_ENDPOINT:-https://dmp-sst-api.dev.hxcd.now.hclsoftware.cloud}" \
     -e NEXT_PUBLIC_DEFAULT_API_KEY="${NEXT_PUBLIC_DEFAULT_API_KEY:-}" \
     -e NEXT_PUBLIC_GA_ID="${NEXT_PUBLIC_GA_ID:-}" \
