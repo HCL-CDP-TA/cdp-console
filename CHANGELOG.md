@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/HCL-CDP-TA/cdp-console/compare/v0.3.0...v0.3.1) (2025-10-26)
+
+
+### Bug Fixes
+
+* .env deploy fix for new param ([5c47124](https://github.com/HCL-CDP-TA/cdp-console/commit/5c4712449045a3ea01fdac4345f71baf39d1a6b1))
+
 ## [0.3.0](https://github.com/HCL-CDP-TA/cdp-console/compare/v0.2.4...v0.3.0) (2025-10-24)
 
 
