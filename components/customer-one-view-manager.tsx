@@ -115,6 +115,8 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
   const [dialogPropertyName, setDialogPropertyName] = useState("")
   const [dialogMappedAttribute, setDialogMappedAttribute] = useState("")
   const [comboboxOpen, setComboboxOpen] = useState(false)
+  const [showCredentialsDialog, setShowCredentialsDialog] = useState(false)
+  const [credentials, setCredentials] = useState({ username: "", password: "" })
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -122,6 +124,47 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
       coordinateGetter: sortableKeyboardCoordinates,
     }),
   )
+
+  const authenticateCoreApi = async (username: string, password: string): Promise<string | null> => {
+    try {
+      // Hash the password using SHA-256
+      const encoder = new TextEncoder()
+      const data = encoder.encode(password)
+      const hashBuffer = await crypto.subtle.digest("SHA-256", data)
+      const hashArray = Array.from(new Uint8Array(hashBuffer))
+      const hashedPassword = hashArray.map(b => b.toString(16).padStart(2, "0")).join("")
+
+      // Try to authenticate
+      const response = await fetch("/api/core-auth/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password: hashedPassword }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        const token = data.access_token
+        if (token) {
+          // Store credentials for future use
+          const storedTenant = JSON.parse(localStorage.getItem(`tenant-${tenant.id}`) || "{}")
+          storedTenant.coreApiUsername = username
+          storedTenant.coreApiPassword = hashedPassword
+          localStorage.setItem(`tenant-${tenant.id}`, JSON.stringify(storedTenant))
+
+          setCoreApiToken(token)
+          return token
+        }
+      } else {
+        setErrorMessage("Authentication failed. Please check your CDP login credentials.")
+        return null
+      }
+    } catch (error) {
+      console.error("Error authenticating:", error)
+      setErrorMessage("Authentication error. Please try again.")
+      return null
+    }
+    return null
+  }
 
   const getCoreApiToken = useCallback(async (): Promise<string | null> => {
     try {
@@ -135,14 +178,10 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
         return null
       }
 
-      // Check if we have stored Core API credentials
+      // Check if we have stored CDP login credentials
       const storedTenant = JSON.parse(localStorage.getItem(`tenant-${tenant.id}`) || "{}")
       if (storedTenant.coreApiUsername && storedTenant.coreApiPassword) {
-        console.log("Customer One View - Using stored Core API credentials:", {
-          username: storedTenant.coreApiUsername,
-          hasStoredPassword: !!storedTenant.coreApiPassword,
-          timestamp: new Date().toISOString(),
-        })
+        console.log("Customer One View - Using stored CDP credentials")
 
         // Try to authenticate with stored credentials (already hashed)
         const response = await fetch("/api/core-auth/token", {
@@ -161,20 +200,24 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
             setCoreApiToken(token)
             return token
           }
+        } else if (response.status === 401) {
+          // Stored credentials are invalid, prompt for new ones
+          console.warn("Stored CDP credentials are invalid")
+          setShowCredentialsDialog(true)
+          return null
         }
+      } else {
+        // No stored credentials, prompt for them
+        console.log("No stored CDP credentials found")
+        setShowCredentialsDialog(true)
+        return null
       }
-
-      // If no stored credentials or authentication failed
-      console.error("No Core API credentials found for tenant")
-      setErrorMessage(
-        "Core API credentials required. Please configure them in Data Mappings → Offline Data Sources first.",
-      )
-      return null
     } catch (error) {
-      console.error("Error getting Core API token:", error)
+      console.error("Error getting CDP authentication token:", error)
       setErrorMessage("Authentication error")
       return null
     }
+    return null
   }, [tenant.id, onAuthExpired])
 
   const fetchMappings = useCallback(async () => {
@@ -459,6 +502,21 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
     setDialogMappedAttribute("")
   }, [])
 
+  const handleCredentialsSubmit = async () => {
+    if (!credentials.username || !credentials.password) {
+      return
+    }
+
+    const token = await authenticateCoreApi(credentials.username, credentials.password)
+    if (token) {
+      setShowCredentialsDialog(false)
+      setCredentials({ username: "", password: "" })
+      // Now fetch the data
+      await fetchMappings()
+      await fetchUserProperties()
+    }
+  }
+
   useEffect(() => {
     fetchMappings()
     fetchUserProperties()
@@ -469,15 +527,13 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-slate-900">Customer One View</h2>
-          <p className="text-slate-600">Manage customer data point mappings for {tenant.name}</p>
-          <p className="text-sm text-slate-500 mt-1">
-            Note: Core API credentials must be configured in Data Mappings first
-          </p>
+          <p className="text-slate-600">Manage Customer One View - Basic Details view for {tenant.name}</p>
+          <p className="text-sm text-slate-500 mt-1">Note: Uses the same credentials as your CDP UI login</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={handleAdd} className="flex items-center gap-2">
             <Plus className="h-4 w-4" />
-            Add Mapping
+            Add Property
           </Button>
           <Button variant="outline" onClick={fetchMappings} disabled={loading} className="flex items-center gap-2">
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
@@ -522,7 +578,7 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Eye className="h-5 w-5" />
-            Data Point Mappings ({mappings.length} total)
+            Map Customer One View properties to profile attributes ({mappings.length} total)
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -565,7 +621,7 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{editingItem ? "Edit Mapping" : "Add Mapping"}</DialogTitle>
+            <DialogTitle>{editingItem ? "Edit Property" : "Add Property"}</DialogTitle>
             <DialogDescription>
               {editingItem
                 ? "Update the property name and mapped profile attribute."
@@ -642,6 +698,52 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
               {editingItem ? "Update" : "Add"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* CDP Login Credentials Dialog */}
+      <Dialog open={showCredentialsDialog} onOpenChange={setShowCredentialsDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>CDP Login Required</DialogTitle>
+            <div className="text-sm text-muted-foreground">
+              Enter your CDP UI login credentials to access Customer One View
+            </div>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="cdp-username">Username</Label>
+              <Input
+                id="cdp-username"
+                value={credentials.username}
+                onChange={e => setCredentials(prev => ({ ...prev, username: e.target.value }))}
+                placeholder="Enter your CDP username"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="cdp-password">Password</Label>
+              <Input
+                id="cdp-password"
+                type="password"
+                value={credentials.password}
+                onChange={e => setCredentials(prev => ({ ...prev, password: e.target.value }))}
+                placeholder="Enter your CDP password"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowCredentialsDialog(false)
+                  setCredentials({ username: "", password: "" })
+                }}>
+                Cancel
+              </Button>
+              <Button onClick={handleCredentialsSubmit} disabled={!credentials.username || !credentials.password}>
+                Login
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

@@ -2026,9 +2026,9 @@ export const DataMappingsManager = ({ tenant, onAuthExpired }: DataMappingsManag
       <Dialog open={showCoreApiCredentials} onOpenChange={setShowCoreApiCredentials}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Core API Credentials</DialogTitle>
+            <DialogTitle>CDP Login Required</DialogTitle>
             <div className="text-sm text-muted-foreground">
-              Enter your Core API credentials to access offline data sources
+              Enter your CDP UI login credentials to access offline data sources
             </div>
           </DialogHeader>
           <div className="space-y-4">
@@ -2038,7 +2038,7 @@ export const DataMappingsManager = ({ tenant, onAuthExpired }: DataMappingsManag
                 id="core-username"
                 value={coreApiCredentials.username}
                 onChange={e => setCoreApiCredentials(prev => ({ ...prev, username: e.target.value }))}
-                placeholder="Enter your username"
+                placeholder="Enter your CDP username"
               />
             </div>
             <div className="space-y-2">
@@ -2048,7 +2048,7 @@ export const DataMappingsManager = ({ tenant, onAuthExpired }: DataMappingsManag
                 type="password"
                 value={coreApiCredentials.password}
                 onChange={e => setCoreApiCredentials(prev => ({ ...prev, password: e.target.value }))}
-                placeholder="Enter your password"
+                placeholder="Enter your CDP password"
               />
             </div>
             <div className="flex justify-end gap-2">
@@ -2063,7 +2063,7 @@ export const DataMappingsManager = ({ tenant, onAuthExpired }: DataMappingsManag
               <Button
                 onClick={handleCoreApiCredentialsSubmit}
                 disabled={!coreApiCredentials.username || !coreApiCredentials.password}>
-                Authenticate
+                Login
               </Button>
             </div>
           </div>
