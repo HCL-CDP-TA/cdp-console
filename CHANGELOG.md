@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.3](https://github.com/HCL-CDP-TA/cdp-console/compare/v0.3.2...v0.3.3) (2025-10-27)
+
+
+### Bug Fixes
+
+* better labelling ([1bc0e20](https://github.com/HCL-CDP-TA/cdp-console/commit/1bc0e2084738b791d2dab39e6d092ae210ffce86))
+
 ## [0.3.2](https://github.com/HCL-CDP-TA/cdp-console/compare/v0.3.1...v0.3.2) (2025-10-26)
 
 
