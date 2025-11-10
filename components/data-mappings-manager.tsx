@@ -1097,7 +1097,7 @@ export const DataMappingsManager = ({ tenant, onAuthExpired }: DataMappingsManag
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-slate-900">Data Mappings</h2>
-          <p className="text-slate-600">Manage data source mappings for {tenant.name}</p>
+          <p className="text-slate-600">Manage data source mappings for {tenant.displayName}</p>
         </div>
         <div className="flex gap-2">
           <Button

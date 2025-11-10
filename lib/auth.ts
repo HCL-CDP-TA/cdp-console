@@ -3,26 +3,32 @@ import CryptoJS from "crypto-js"
 
 export const getAuthState = (): AuthState => {
   if (typeof window === "undefined") {
-    return { isAuthenticated: false, token: null, username: null }
+    return { isAuthenticated: false, token: null, coreToken: null, username: null }
   }
 
   const token = localStorage.getItem("auth-token")
+  const coreToken = localStorage.getItem("auth-core-token")
   const username = localStorage.getItem("auth-username")
 
   return {
     isAuthenticated: !!token,
     token,
+    coreToken,
     username,
   }
 }
 
-export const setAuthState = (token: string, username: string) => {
+export const setAuthState = (token: string, username: string, coreToken?: string) => {
   localStorage.setItem("auth-token", token)
   localStorage.setItem("auth-username", username)
+  if (coreToken) {
+    localStorage.setItem("auth-core-token", coreToken)
+  }
 }
 
 export const clearAuthState = () => {
   localStorage.removeItem("auth-token")
+  localStorage.removeItem("auth-core-token")
   localStorage.removeItem("auth-username")
 }
 

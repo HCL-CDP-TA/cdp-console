@@ -81,7 +81,7 @@ export const ChannelPriority = ({ tenant, onAuthExpired }: ChannelPriorityProps)
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-slate-900">Channel Priority</h2>
-          <p className="text-slate-600">Identity resolution priority for {tenant.name}</p>
+          <p className="text-slate-600">Identity resolution priority for {tenant.displayName}</p>
         </div>
         <Button
           variant="outline"

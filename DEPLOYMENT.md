@@ -4,6 +4,12 @@ This directory contains Docker deployment scripts and configurations for the CDP
 
 ## Quick Start
 
+First get a copy of the deploy script directly into the deployment folder and make it executable:
+
+```
+curl -o deploy.sh https://raw.githubusercontent.com/HCL-CDP-TA/cdp-console/main/deploy.sh && chmod +x deploy.sh
+```
+
 ### Option 1: Simple Docker Deployment
 
 ```bash
@@ -52,6 +58,7 @@ Required variables:
 Optional variables:
 
 - `NEXT_PUBLIC_DEFAULT_API_ENDPOINT`: Default CDP API endpoint
+- `CORE_API_URL`: Core API endpoint used in the CDP UI
 - `NEXT_PUBLIC_DEFAULT_API_KEY`: Default CDP API key
 - `NEXT_PUBLIC_GA_ID`: Google Analytics ID
 

@@ -527,8 +527,7 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-slate-900">Customer One View</h2>
-          <p className="text-slate-600">Manage Customer One View - Basic Details view for {tenant.name}</p>
-          <p className="text-sm text-slate-500 mt-1">Note: Uses the same credentials as your CDP UI login</p>
+          <p className="text-slate-600">Manage Customer One View - Basic Details view for {tenant.displayName}</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={handleAdd} className="flex items-center gap-2">

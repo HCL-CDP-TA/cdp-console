@@ -44,10 +44,63 @@ export const LoginForm = ({ onLoginSuccess }: LoginFormProps) => {
       console.log("Response status:", response.status, response.statusText)
 
       const data = await response.json()
-      console.log("Response data:", data)
+      console.log("Admin login response data:", data)
 
       if (response.ok) {
-        setAuthState(data.token, username)
+        // Fetch the core API token FIRST before storing anything
+        let coreToken: string | undefined
+
+        try {
+          console.log("Fetching core API token...")
+          const coreResponse = await fetch("/api/core-auth/token", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              username,
+              password: hashedPassword,
+            }),
+          })
+
+          console.log("Core API response status:", coreResponse.status, coreResponse.statusText)
+
+          if (coreResponse.ok) {
+            const coreData = await coreResponse.json()
+            console.log("Core API token FULL response:", coreData)
+            console.log("Core API token response:", {
+              hasAccessToken: !!coreData.access_token,
+              tokenLength: coreData.access_token?.length,
+              tokenPreview: coreData.access_token?.substring(0, 30) + "...",
+              allKeys: Object.keys(coreData),
+            })
+
+            if (coreData.access_token) {
+              coreToken = coreData.access_token
+              console.log("✅ Got core access token")
+            } else {
+              console.error("❌ Core API response OK but no access_token field!", coreData)
+            }
+          } else {
+            const errorText = await coreResponse.text()
+            console.error("❌ Failed to fetch core API token:", {
+              status: coreResponse.status,
+              statusText: coreResponse.statusText,
+              error: errorText,
+            })
+          }
+        } catch (coreError) {
+          console.error("❌ Exception fetching core token:", coreError)
+        }
+
+        // Now store BOTH tokens at once
+        setAuthState(data.token, username, coreToken)
+        console.log("✅ Stored auth state:", {
+          hasAdminToken: !!data.token,
+          hasCoreToken: !!coreToken,
+          coreTokenLength: coreToken?.length,
+        })
+
         onLoginSuccess()
       } else {
         setError(data.error || "Login failed")
