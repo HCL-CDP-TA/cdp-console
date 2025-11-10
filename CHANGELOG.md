@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/HCL-CDP-TA/cdp-console/compare/v0.3.3...v0.4.0) (2025-11-10)
+
+
+### Features
+
+* added Live Events by data source ([cdfd333](https://github.com/HCL-CDP-TA/cdp-console/commit/cdfd33320a286998050ce17382f44de3762829e3))
+
 ## [0.3.3](https://github.com/HCL-CDP-TA/cdp-console/compare/v0.3.2...v0.3.3) (2025-10-27)
 
 
