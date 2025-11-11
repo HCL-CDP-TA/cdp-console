@@ -27,6 +27,7 @@ import {
   Smartphone,
   LogIn,
   LogOut,
+  Copy,
 } from "lucide-react"
 
 interface Event {
@@ -108,6 +109,8 @@ export default function DataSourcePage() {
   const [profileData, setProfileData] = useState<any>(null)
   const [profileLoading, setProfileLoading] = useState(false)
   const [profileError, setProfileError] = useState<string | null>(null)
+  const [leftPaneWidth, setLeftPaneWidth] = useState(30) // percentage
+  const [isResizing, setIsResizing] = useState(false)
 
   // Fetch profile data based on event ID
   const fetchProfileData = useCallback(async (eventId: string) => {
@@ -175,6 +178,50 @@ export default function DataSourcePage() {
       setProfileError(null)
     }
   }, [selectedEvent, fetchProfileData])
+
+  // Handle resizing of panes
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    setIsResizing(true)
+    e.preventDefault()
+  }, [])
+
+  const handleMouseMove = useCallback(
+    (e: MouseEvent) => {
+      if (!isResizing) return
+
+      const container = document.getElementById("resizable-container")
+      if (!container) return
+
+      const containerRect = container.getBoundingClientRect()
+      const newWidth = ((e.clientX - containerRect.left) / containerRect.width) * 100
+
+      // Constrain between 20% and 60%
+      if (newWidth >= 20 && newWidth <= 60) {
+        setLeftPaneWidth(newWidth)
+      }
+    },
+    [isResizing],
+  )
+
+  const handleMouseUp = useCallback(() => {
+    setIsResizing(false)
+  }, [])
+
+  useEffect(() => {
+    if (isResizing) {
+      document.addEventListener("mousemove", handleMouseMove)
+      document.addEventListener("mouseup", handleMouseUp)
+      document.body.style.cursor = "col-resize"
+      document.body.style.userSelect = "none"
+
+      return () => {
+        document.removeEventListener("mousemove", handleMouseMove)
+        document.removeEventListener("mouseup", handleMouseUp)
+        document.body.style.cursor = ""
+        document.body.style.userSelect = ""
+      }
+    }
+  }, [isResizing, handleMouseMove, handleMouseUp])
 
   // Helper function to get badge variant based on event type
   const getEventBadgeVariant = (type: string): string => {
@@ -478,9 +525,9 @@ export default function DataSourcePage() {
         )}
 
         {/* Two Column Layout */}
-        <div className="grid grid-cols-10 gap-6 h-[calc(100vh-200px)]">
+        <div id="resizable-container" className="flex gap-0 h-[calc(100vh-200px)] relative">
           {/* Left Column - Events List */}
-          <Card className="flex flex-col col-span-3">
+          <Card className="flex flex-col" style={{ width: `${leftPaneWidth}%` }}>
             <CardHeader>
               <CardTitle className="text-base">Live Events ({events.length})</CardTitle>
             </CardHeader>
@@ -527,8 +574,17 @@ export default function DataSourcePage() {
             </CardContent>
           </Card>
 
+          {/* Resizable Divider */}
+          <div
+            onMouseDown={handleMouseDown}
+            className={`w-1 hover:w-2 bg-slate-200 hover:bg-blue-400 cursor-col-resize transition-all flex-shrink-0 ${
+              isResizing ? "bg-blue-500 w-2" : ""
+            }`}
+            style={{ cursor: "col-resize" }}
+          />
+
           {/* Right Column - Event Details */}
-          <Card className="flex flex-col col-span-7">
+          <Card className="flex flex-col flex-1">
             <CardHeader>
               <CardTitle className="text-base">Event Details</CardTitle>
             </CardHeader>
@@ -572,6 +628,19 @@ export default function DataSourcePage() {
                         {selectedEvent.userId == "" ? "Not provided" : selectedEvent.userId}
                       </p>
                     </div>
+                    {profileData?.key && (
+                      <div>
+                        <label className="text-sm font-medium text-slate-600">Profile Key</label>
+                        <p className="text-sm mt-1">
+                          <a
+                            href="#"
+                            className="text-blue-600 hover:text-blue-800 hover:underline font-mono"
+                            onClick={e => e.preventDefault()}>
+                            {profileData.key}
+                          </a>
+                        </p>
+                      </div>
+                    )}
                   </div>
 
                   {/* Properties */}
@@ -584,6 +653,7 @@ export default function DataSourcePage() {
                         onClick={() => {
                           navigator.clipboard.writeText(JSON.stringify(selectedEvent.properties, null, 2))
                         }}>
+                        <Copy className="h-4 w-4 mr-2" />
                         Copy JSON
                       </Button>
                     </div>
@@ -610,6 +680,7 @@ export default function DataSourcePage() {
                             onClick={() => {
                               navigator.clipboard.writeText(JSON.stringify(profileData, null, 2))
                             }}>
+                            <Copy className="h-4 w-4 mr-2" />
                             Copy JSON
                           </Button>
                         )}
