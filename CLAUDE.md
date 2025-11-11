@@ -27,6 +27,146 @@ netlify dev          # Local dev with Netlify functions
 act release --secret-file .secrets
 ```
 
+## Version Control & Release Management
+
+This project uses **release-please** for automated versioning and changelog generation. All commits MUST follow the [Conventional Commits](https://www.conventionalcommits.org/) specification.
+
+### Conventional Commits Format
+
+```
+<type>(<scope>): <description>
+
+[optional body]
+
+[optional footer(s)]
+```
+
+**Required Elements**:
+- `type`: The kind of change (see types below)
+- `description`: Short summary in present tense (lowercase, no period)
+
+**Optional Elements**:
+- `scope`: Component/module affected (e.g., `auth`, `mappings`, `api`)
+- `body`: Detailed explanation of changes
+- `footer`: Breaking changes, issue references
+
+### Commit Types
+
+| Type | Description | Version Impact | Example |
+|------|-------------|----------------|---------|
+| `feat` | New feature | Minor (0.x.0) | `feat(mappings): add drag-and-drop sorting` |
+| `fix` | Bug fix | Patch (0.0.x) | `fix(auth): handle expired JWT tokens correctly` |
+| `docs` | Documentation only | None | `docs: update API endpoint documentation` |
+| `style` | Code style/formatting | None | `style: fix indentation in UserManager` |
+| `refactor` | Code restructuring | None | `refactor(api): simplify tenant validation logic` |
+| `perf` | Performance improvement | Patch (0.0.x) | `perf(data-sources): optimize fetch with caching` |
+| `test` | Adding/updating tests | None | `test: add unit tests for hashPassword` |
+| `build` | Build system changes | None | `build: update Next.js to 15.1.0` |
+| `ci` | CI/CD changes | None | `ci: add Docker build workflow` |
+| `chore` | Maintenance tasks | None | `chore: update dependencies` |
+| `revert` | Revert previous commit | Depends | `revert: feat(mappings): add drag-and-drop` |
+
+### Breaking Changes
+
+Breaking changes trigger a **major version bump** (x.0.0). Indicate breaking changes with:
+
+1. `!` after type/scope: `feat!:` or `feat(api)!:`
+2. Footer with `BREAKING CHANGE:` followed by description
+
+```bash
+# Example 1: Using !
+feat(auth)!: require SHA-256 password hashing
+
+All authentication endpoints now require client-side password hashing.
+Update client code to use hashPassword() from lib/auth.ts.
+
+# Example 2: Using footer
+feat(api): change tenant API response structure
+
+BREAKING CHANGE: Tenant API now returns `displayName` instead of `name`.
+Update all components that reference tenant.name to use tenant.displayName.
+```
+
+### Scopes
+
+Common scopes in this project:
+- `auth` - Authentication and authorization
+- `api` - API routes and backend proxy
+- `mappings` - Data mappings functionality
+- `user-properties` - User properties management
+- `data-sources` - Data source management
+- `tenants` - Tenant management
+- `ui` - UI components
+- `analytics` - Analytics tracking
+- `deployment` - Deployment configuration
+
+### Examples
+
+**Feature additions**:
+```bash
+feat(customer-one-view): add customer profile export
+feat(ui): add dark mode toggle to settings
+feat: integrate Socket.io for real-time updates
+```
+
+**Bug fixes**:
+```bash
+fix(auth): clear localStorage on 401 responses
+fix(api): handle URL-encoded data source names
+fix(mappings): prevent duplicate tenant ID prefix
+```
+
+**Documentation**:
+```bash
+docs: add deployment troubleshooting guide
+docs(api): document SST API authentication headers
+```
+
+**Chores**:
+```bash
+chore: update shadcn/ui components to latest
+chore(deps): bump lucide-react to 0.400.0
+chore: clean up unused imports
+```
+
+**Multiple changes in one commit** (avoid if possible):
+```bash
+feat(data-sources): add filtering and pagination
+
+- Add search input for data source names
+- Implement pagination with page size selector
+- Add loading states and error handling
+```
+
+### Version Impact
+
+release-please automatically determines version bumps:
+- `feat` → Minor version (0.x.0)
+- `fix`, `perf` → Patch version (0.0.x)
+- `BREAKING CHANGE` or `!` → Major version (x.0.0)
+- Other types → No version change (included in next release)
+
+### Best Practices
+
+1. **One logical change per commit** - Don't mix features, fixes, and refactoring
+2. **Write clear descriptions** - Future developers should understand the change without reading code
+3. **Use scopes consistently** - Helps with changelog organization and filtering
+4. **Reference issues** - Include issue numbers in footer: `Fixes #123` or `Closes #456`
+5. **Keep commits atomic** - Each commit should leave the codebase in a working state
+6. **Don't skip the type** - Every commit needs a type, even for "quick fixes"
+
+### Release Process
+
+1. Make changes following conventional commits
+2. Push to main branch (or merge PR)
+3. release-please bot automatically:
+   - Creates/updates a release PR with changelog
+   - Bumps version in `package.json`
+   - Generates GitHub release notes
+4. Merge the release PR to trigger deployment
+
+**Common Mistake**: Using non-standard types like `update`, `add`, `change`. Always use the standard types listed above.
+
 ## Architecture
 
 ### Multi-Backend Proxy Structure
