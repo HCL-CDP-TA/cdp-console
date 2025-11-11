@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/HCL-CDP-TA/cdp-console/compare/v1.0.0...v1.0.1) (2025-11-11)
+
+
+### Bug Fixes
+
+* nextjs upgrade fixes ([bb4b409](https://github.com/HCL-CDP-TA/cdp-console/commit/bb4b409150f11da9cf962c952154edb16a86d5cd))
+
 ## [1.0.0](https://github.com/HCL-CDP-TA/cdp-console/compare/v0.4.0...v1.0.0) (2025-11-11)
 
 
