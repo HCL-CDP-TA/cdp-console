@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.0.0](https://github.com/HCL-CDP-TA/cdp-console/compare/v0.4.0...v1.0.0) (2025-11-11)
+
+
+### ⚠ BREAKING CHANGES
+
+* Requires Node.js 20+ (upgraded from Node.js 18)
+
+### Features
+
+* adjustable panes, copy icons & Profile Key link ([843cdc4](https://github.com/HCL-CDP-TA/cdp-console/commit/843cdc46e638294482df4aa04aa62421bed553db))
+
+
+### Miscellaneous Chores
+
+* upgrade to Next.js 16 and React 19 ([0c7a386](https://github.com/HCL-CDP-TA/cdp-console/commit/0c7a3865f994707713ece2862e6cf3b7354f5082))
+
 ## [0.4.0](https://github.com/HCL-CDP-TA/cdp-console/compare/v0.3.3...v0.4.0) (2025-11-10)
 
 
