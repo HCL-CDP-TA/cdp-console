@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.1](https://github.com/HCL-CDP-TA/cdp-console/compare/v1.0.0...v1.0.1) (2025-12-07)
+
+
+### Bug Fixes
+
+* nextjs 16.0.7 security update ([4ab7b62](https://github.com/HCL-CDP-TA/cdp-console/commit/4ab7b621a3ab23c2e10d58095cf9b04bbe61db65))
+* nextjs upgrade fixes ([bb4b409](https://github.com/HCL-CDP-TA/cdp-console/commit/bb4b409150f11da9cf962c952154edb16a86d5cd))
+
 ## [1.0.0](https://github.com/HCL-CDP-TA/cdp-console/compare/v0.4.0...v1.0.0) (2025-11-11)
 
 
