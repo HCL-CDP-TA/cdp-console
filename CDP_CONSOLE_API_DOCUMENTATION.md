@@ -490,6 +490,54 @@ Retrieves a specific mapping for a tenant, data source, and user property.
 - `dataSource` (string) - Data source name
 - `userProperty` (string) - User property name
 
+#### PUT `/api/mappings/[tenantId]/[dataSource]/update`
+
+Updates an existing data mapping for a specific tenant and data source.
+
+**Authentication:** API Key Required
+
+**Path Parameters:**
+
+- `tenantId` (string) - The tenant ID
+- `dataSource` (string) - Data source name
+
+**Headers Required:**
+
+- `x-api-key` (string) - API key for the tenant
+- `x-api-endpoint` (string) - API endpoint URL for the tenant
+
+**Request:**
+
+```json
+{
+  "TenantId": "string",
+  "UserProperty": "string",
+  "ProfileUpdateFunction": "string",
+  "IsMandatory": "boolean",
+  "DataSourceName": "string",
+  "Preference": "string",
+  "Priority": "number",
+  "IsProfileField": "boolean",
+  "Metadata": "string",
+  "DataType": "string"
+}
+```
+
+**Response (Success - 200):**
+
+```json
+{
+  // Updated mapping object from backend
+}
+```
+
+**Backend Mapping:**
+
+- Proxies to: `${apiEndpoint}/api/mapping`
+- Method: PUT
+- Headers: `authkey: ${apiKey}`, `Content-Type: application/json`
+- Request body is passed through directly to the backend
+
 #### DELETE `/api/mappings/[tenantId]/[dataSource]/[userProperty]/delete`
 
 Deletes a specific data mapping.
@@ -665,17 +713,230 @@ Retrieves all active offline data sources for a specific client.
 - Only returns data sources where `isActive === 1`
 - The `name` field is used for identification (not `id`)
 - Special `shouldReauth` flag for 401 responses
-  "error": "Authentication failed",
-  "shouldRedirect": true
-  }
 
-````
+---
+
+### 8. Data Sources
+
+#### GET `/api/data-sources/[clientId]`
+
+Retrieves all data source instances for a specific client from the Core API.
+
+**Authentication:** Core API Bearer Token Required
+
+**Path Parameters:**
+
+- `clientId` (string) - The client/campaign ID
+
+**Headers Required:**
+
+- `Authorization: Bearer <core_api_token>`
+
+**Response (Success - 200):**
+
+```json
+{
+  "data": [
+    {
+      // Data source instance objects from Core API
+    }
+  ]
+}
+```
+
+**Response (Empty - 404):**
+
+```json
+{
+  "data": []
+}
+```
+
+**Response (Error - 401 with re-auth):**
+
+```json
+{
+  "error": "Authentication failed",
+  "shouldReauth": true
+}
+```
 
 **Backend Mapping:**
 
-- Proxies to: `${ADMIN_API_URL}/api/getChannelPriority/${tenantId}`
+- Proxies to: `${CORE_API_URL}/-/v1/advertisers/${clientId}/sourceInstance`
 - Method: GET
 - Headers: `Authorization: Bearer ${token}`, `Content-Type: application/json`
+
+**Notes:**
+
+- Returns empty array (not 404) when no data sources exist
+- Special `shouldReauth` flag for 401 responses to trigger re-authentication
+
+---
+
+### 9. Customer One View
+
+#### GET `/api/customer-one-view/[clientId]`
+
+Retrieves Customer One View field mappings and display order for a specific client. These mappings define which profile attributes are shown in the Customer One View and in what order.
+
+**Authentication:** Core API Bearer Token Required
+
+**Path Parameters:**
+
+- `clientId` (string) - The client/campaign ID
+
+**Headers Required:**
+
+- `Authorization: Bearer <core_api_token>`
+
+**Response (Success - 200):**
+
+```json
+{
+  "data": [
+    {
+      "DataPointMapping": "{\"profile_attribute_1\":\"Display Name 1\",\"profile_attribute_2\":\"Display Name 2\"}"
+    }
+  ]
+}
+```
+
+**Response (Empty - 404):**
+
+```json
+{
+  "data": []
+}
+```
+
+**Response (Error - 401 with re-auth):**
+
+```json
+{
+  "error": "Authentication failed",
+  "shouldReauth": true
+}
+```
+
+**Backend Mapping:**
+
+- Proxies to: `${CORE_API_URL}/-/v1/advertisers/${clientId}/CustomerOneViewSettingsAdd`
+- Method: GET
+- Headers: `Authorization: Bearer ${token}`, `Content-Type: application/json`
+
+**Notes:**
+
+- The `DataPointMapping` field may be a JSON string or a parsed object depending on the backend version
+- Field display order is determined by the key ordering in the `DataPointMapping` JSON object
+- Keys are mapped profile attribute codes (from user properties), values are human-readable display names
+
+#### POST `/api/customer-one-view/[clientId]`
+
+Saves Customer One View field mappings and display order for a specific client. The order of keys in the `mappingData` object determines the field display order in the Customer One View.
+
+**Authentication:** Core API Bearer Token Required
+
+**Path Parameters:**
+
+- `clientId` (string) - The client/campaign ID
+
+**Headers Required:**
+
+- `Authorization: Bearer <core_api_token>`
+
+**Request:**
+
+```json
+{
+  "data": {
+    "mappingData": {
+      "profile_attribute_1": "Display Name 1",
+      "profile_attribute_2": "Display Name 2",
+      "profile_attribute_3": "Display Name 3"
+    }
+  }
+}
+```
+
+**Response (Success - 200):**
+
+```json
+{
+  "success": true,
+  "data": {
+    // Backend response
+  }
+}
+```
+
+**Response (Error - 401 with re-auth):**
+
+```json
+{
+  "error": "Authentication failed",
+  "shouldReauth": true
+}
+```
+
+**Backend Mapping:**
+
+- Proxies to: `${CORE_API_URL}/-/v1/advertisers/${clientId}/CustomerOneViewSettingsAdd`
+- Method: POST
+- Headers: `Authorization: Bearer ${token}`, `Content-Type: application/json`
+- Request body is passed through directly to the backend
+
+**Notes:**
+
+- Field ordering is controlled by the insertion order of keys in the `mappingData` object
+- The UI uses drag-and-drop (`@dnd-kit`) to allow users to reorder fields before saving
+- Keys in `mappingData` are user property `dmpDataPointCode` values from the SST API
+- Values in `mappingData` are free-text display names chosen by the user
+
+---
+
+### 10. Profile Lookup
+
+#### GET `/api/profile/[eventId]`
+
+Retrieves profile and segment data for a specific event/user from the SST API. Used for viewing individual customer profiles within a data source context.
+
+**Authentication:** API Key Required
+
+**Path Parameters:**
+
+- `eventId` (string) - The event ID / user identifier to look up
+
+**Headers Required:**
+
+- `x-client-id` (string) - The client/campaign ID
+- `x-api-key` (string) - API key for the tenant
+- `x-api-endpoint` (string) - API endpoint URL for the tenant
+
+**Response (Success - 200):**
+
+```json
+{
+  // Profile and segment data from SST API
+}
+```
+
+**Backend Mapping:**
+
+- Proxies to: `${apiEndpoint}/api/v1/getProfileAndSegments`
+- Method: GET
+- Query parameters:
+  - `campaign`: `VIZVRM${clientId}` (auto-prefixed)
+  - `key`: eventId from path
+  - `lock_type`: `none`
+  - `auth_key`: apiKey from header
+  - `lookup`: `multi`
+
+**Notes:**
+
+- Client ID is automatically prefixed with "VIZVRM" in the backend call (same pattern as mappings API)
+- Uses query parameters rather than path segments for the backend SST API call
+- The `lookup=multi` parameter enables multi-key lookup mode
 
 ---
 
@@ -875,6 +1136,9 @@ interface Tenant {
 5. **TenantService** - Tenant-specific operations (user properties, mappings)
 6. **ChannelService** - Channel priority management
 7. **CoreApiService** - Core API authentication and offline data source management
+8. **CustomerOneViewService** - Customer One View field mapping and ordering
+9. **DataSourceService** - Data source instance management
+10. **ProfileService** - Profile and segment lookup
 
 ### Configuration Required
 
@@ -931,5 +1195,4 @@ apiEndpoint: string // Tenant-specific API endpoint
 - **URL Encoding**: Data source names automatically URL-encoded in API calls
 - **Active Filtering**: Only display data sources where `isActive === 1`
 
-This documentation provides complete coverage of the CDP Console API functionality, including the new Core API integration for offline data sources, enabling full replication through an SDK without requiring access to the source code.
-```
+This documentation provides complete coverage of the CDP Console API functionality, including Core API integration for offline data sources, Customer One View field management, data source instances, and profile lookup, enabling full replication through an SDK without requiring access to the source code.

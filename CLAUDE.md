@@ -177,14 +177,14 @@ All external API calls are proxied through Next.js API routes (`app/api/`) to th
    - Auth: `Authorization: Bearer {JWT_token}`
    - Endpoints: `/api/auth/login`, `/api/clients`, `/api/users/*`
 
-2. **SST API** (tenant-specific) - User properties and data mappings
+2. **SST API** (tenant-specific) - User properties, data mappings, and profile lookup
    - Auth: Custom headers `x-api-key` and `x-api-endpoint`
    - Tenant-specific credentials stored in localStorage
-   - Endpoints: `/api/user-properties/*`, `/api/mappings/*`
+   - Endpoints: `/api/user-properties/*`, `/api/mappings/*`, `/api/profile/*`
 
-3. **Core API** - OAuth2 authentication and offline data sources
+3. **Core API** - OAuth2 authentication, offline data sources, data source instances, and Customer One View
    - Auth: `Authorization: Bearer {access_token}` (OAuth2)
-   - Endpoints: `/api/core-auth/token`, `/api/offline-data-sources/*`
+   - Endpoints: `/api/core-auth/token`, `/api/offline-data-sources/*`, `/api/data-sources/*`, `/api/customer-one-view/*`
 
 **API Route Pattern (Next.js 15)**:
 ```typescript
