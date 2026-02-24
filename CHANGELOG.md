@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.2](https://github.com/HCL-CDP-TA/cdp-console/compare/v1.0.1...v1.0.2) (2026-02-24)
+
+
+### Bug Fixes
+
+* resolve npm audit vulnerabilities in production dependencies ([935eda7](https://github.com/HCL-CDP-TA/cdp-console/commit/935eda7115fc0a1ed5fae892b3c028736f4296f4))
+* update next version specifier to ^16.1.6 in package.json ([d9e9396](https://github.com/HCL-CDP-TA/cdp-console/commit/d9e939657321c4a716d9ab57fba821b16cb0616e))
+
 ## [1.0.1](https://github.com/HCL-CDP-TA/cdp-console/compare/v1.0.0...v1.0.1) (2025-12-07)
 
 
