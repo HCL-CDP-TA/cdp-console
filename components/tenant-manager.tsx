@@ -35,25 +35,38 @@ export const TenantManager = ({ onSettingsUpdated, onAuthExpired, onTenantSelect
     apiEndpoint: "",
   })
 
-  // Load settings from localStorage
+  // Load settings from localStorage, falling back to env defaults for empty values
   useEffect(() => {
+    const defaultApiKey = process.env.NEXT_PUBLIC_DEFAULT_API_KEY || ""
+    const defaultApiEndpoint = process.env.NEXT_PUBLIC_DEFAULT_API_ENDPOINT || ""
+
     const savedSettings = localStorage.getItem("cdp-tenant-settings")
     if (savedSettings) {
       try {
         const settings = JSON.parse(savedSettings)
-        setTenantSettings(settings)
+        // Fall back to env defaults if saved values are empty
+        const resolvedSettings = {
+          ...settings,
+          apiKey: settings.apiKey || defaultApiKey,
+          apiEndpoint: settings.apiEndpoint || defaultApiEndpoint,
+        }
+        setTenantSettings(resolvedSettings)
         setSettingsForm({
-          apiKey: settings.apiKey || "",
-          apiEndpoint: settings.apiEndpoint || "",
+          apiKey: resolvedSettings.apiKey,
+          apiEndpoint: resolvedSettings.apiEndpoint,
         })
+        // Persist the resolved values back if env defaults were applied
+        if (!settings.apiKey || !settings.apiEndpoint) {
+          localStorage.setItem("cdp-tenant-settings", JSON.stringify(resolvedSettings))
+        }
       } catch (e) {
         console.error("Failed to parse tenant settings:", e)
       }
     } else {
       // Initialize with default values from env
       const defaultSettings: TenantSettings = {
-        apiKey: process.env.NEXT_PUBLIC_DEFAULT_API_KEY || "",
-        apiEndpoint: process.env.NEXT_PUBLIC_DEFAULT_API_ENDPOINT || "",
+        apiKey: defaultApiKey,
+        apiEndpoint: defaultApiEndpoint,
         favoriteTenants: [],
       }
       setTenantSettings(defaultSettings)
@@ -72,7 +85,7 @@ export const TenantManager = ({ onSettingsUpdated, onAuthExpired, onTenantSelect
 
   const fetchClients = useCallback(async () => {
     if (!tenantSettings.apiKey || !tenantSettings.apiEndpoint) {
-      setError("API configuration is missing. Please configure your API endpoint and key.")
+      setError("SST API configuration is missing. Please configure your SST API endpoint and key.")
       return
     }
 
@@ -213,7 +226,7 @@ export const TenantManager = ({ onSettingsUpdated, onAuthExpired, onTenantSelect
             </DialogTrigger>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
-                <DialogTitle>API Configuration</DialogTitle>
+                <DialogTitle>SST API Configuration</DialogTitle>
               </DialogHeader>
               <form onSubmit={handleSettingsSubmit} className="space-y-4">
                 <div className="space-y-2">
@@ -437,11 +450,11 @@ export const TenantManager = ({ onSettingsUpdated, onAuthExpired, onTenantSelect
             <Building2 className="h-12 w-12 text-slate-400 mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-slate-900 mb-2">No Tenants Available</h3>
             <p className="text-slate-600 mb-4">
-              No tenants are currently available. Please check your API configuration.
+              No tenants are currently available. Please check your SST API configuration.
             </p>
             <Button onClick={() => setIsSettingsDialogOpen(true)}>
               <Key className="h-4 w-4 mr-2" />
-              Configure API Settings
+              Configure SST API Settings
             </Button>
           </CardContent>
         </Card>

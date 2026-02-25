@@ -26,29 +26,40 @@ export const TenantSelector = ({ onTenantSelected, onManageTenants }: TenantSele
     favoriteTenants: [],
   })
 
-  // Load settings from localStorage
+  // Load settings from localStorage, falling back to env defaults for empty values
   useEffect(() => {
+    const defaultApiKey = process.env.NEXT_PUBLIC_DEFAULT_API_KEY || ""
+    const defaultApiEndpoint = process.env.NEXT_PUBLIC_DEFAULT_API_ENDPOINT || ""
+
     const savedSettings = localStorage.getItem("cdp-tenant-settings")
     if (savedSettings) {
       try {
         const settings = JSON.parse(savedSettings)
-        setTenantSettings(settings)
+        // Fall back to env defaults if saved values are empty
+        const resolvedSettings = {
+          ...settings,
+          apiKey: settings.apiKey || defaultApiKey,
+          apiEndpoint: settings.apiEndpoint || defaultApiEndpoint,
+        }
+        setTenantSettings(resolvedSettings)
+        // Persist the resolved values back if env defaults were applied
+        if (!settings.apiKey || !settings.apiEndpoint) {
+          localStorage.setItem("cdp-tenant-settings", JSON.stringify(resolvedSettings))
+        }
       } catch (e) {
         console.error("Failed to parse tenant settings:", e)
-        // Initialize with default values from env
         const defaultSettings: TenantSettings = {
-          apiKey: process.env.NEXT_PUBLIC_DEFAULT_API_KEY || "",
-          apiEndpoint: process.env.NEXT_PUBLIC_DEFAULT_API_ENDPOINT || "",
+          apiKey: defaultApiKey,
+          apiEndpoint: defaultApiEndpoint,
           favoriteTenants: [],
         }
         setTenantSettings(defaultSettings)
         localStorage.setItem("cdp-tenant-settings", JSON.stringify(defaultSettings))
       }
     } else {
-      // Initialize with default values from env
       const defaultSettings: TenantSettings = {
-        apiKey: process.env.NEXT_PUBLIC_DEFAULT_API_KEY || "",
-        apiEndpoint: process.env.NEXT_PUBLIC_DEFAULT_API_ENDPOINT || "",
+        apiKey: defaultApiKey,
+        apiEndpoint: defaultApiEndpoint,
         favoriteTenants: [],
       }
       setTenantSettings(defaultSettings)
@@ -58,7 +69,7 @@ export const TenantSelector = ({ onTenantSelected, onManageTenants }: TenantSele
 
   const fetchClients = useCallback(async () => {
     if (!tenantSettings.apiKey || !tenantSettings.apiEndpoint) {
-      setError("API configuration is missing. Please set up your API endpoint and key.")
+      setError("SST API configuration is missing. Please set up your SST API endpoint and key.")
       setLoading(false)
       return
     }

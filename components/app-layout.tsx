@@ -5,7 +5,7 @@ import { useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Dialog, DialogContent } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -500,6 +500,10 @@ export default function AppLayout({ children }: AppLayoutProps) {
         {/* Tenant Selector Dialog */}
         <Dialog open={showTenantSelector} onOpenChange={setShowTenantSelector}>
           <DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
+            <DialogHeader className="sr-only">
+              <DialogTitle>Select Tenant</DialogTitle>
+              <DialogDescription>Choose a tenant to manage</DialogDescription>
+            </DialogHeader>
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="text-2xl font-bold text-slate-900">Select Tenant</h2>
