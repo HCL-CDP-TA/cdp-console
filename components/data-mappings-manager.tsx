@@ -52,8 +52,6 @@ import {
 import { Tenant, DataMapping, DataSource, OfflineDataSource } from "@/types/tenant"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
-import { validateAuthState } from "@/lib/auth"
-import { hashPassword } from "@/lib/auth"
 import {
   trackDataManagement,
   trackError,
@@ -88,11 +86,6 @@ export const DataMappingsManager = ({ tenant, onAuthExpired }: DataMappingsManag
   const [coreApiToken, setCoreApiToken] = useState<string | null>(null)
   const [selectedOfflineDataSource, setSelectedOfflineDataSource] = useState<string | null>(null)
   const [offlineDataSourcesLoading, setOfflineDataSourcesLoading] = useState(false)
-  const [showCoreApiCredentials, setShowCoreApiCredentials] = useState(false)
-  const [coreApiCredentials, setCoreApiCredentials] = useState({
-    username: "",
-    password: "",
-  })
   const [formData, setFormData] = useState({
     userProperty: "",
     userProperties: "", // For bulk creation
@@ -124,72 +117,6 @@ export const DataMappingsManager = ({ tenant, onAuthExpired }: DataMappingsManag
     return dataSource === "dataingestionpi" ? "dataingestionapi" : dataSource
   }
 
-  // Core API authentication functions
-  const authenticateCoreApi = async (username: string, password: string): Promise<string | null> => {
-    try {
-      const hashedPassword = await hashPassword(password)
-      console.log("Core API Authentication - Frontend:", {
-        username,
-        originalPasswordLength: password.length,
-        hashedPasswordLength: hashedPassword.length,
-        hashedPasswordPrefix: hashedPassword.substring(0, 8) + "...",
-        timestamp: new Date().toISOString(),
-      })
-
-      return await authenticateCoreApiWithHash(username, hashedPassword)
-    } catch (error) {
-      console.error("Core API authentication error:", error)
-      return null
-    }
-  }
-
-  const authenticateCoreApiWithHash = async (username: string, hashedPassword: string): Promise<string | null> => {
-    try {
-      console.log("Core API Authentication With Hash - Frontend:", {
-        username,
-        hashedPasswordLength: hashedPassword.length,
-        hashedPasswordPrefix: hashedPassword.substring(0, 8) + "...",
-        timestamp: new Date().toISOString(),
-      })
-
-      const response = await fetch("/api/core-auth/token", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password: hashedPassword }),
-      })
-
-      console.log("Core API Authentication - Response received:", {
-        status: response.status,
-        ok: response.ok,
-        statusText: response.statusText,
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        console.log("Core API Authentication - Success:", {
-          hasAccessToken: !!data.access_token,
-          tokenLength: data.access_token?.length,
-          tokenType: data.token_type,
-        })
-        return data.access_token
-      } else {
-        const errorData = await response.json()
-        console.error("Core API Authentication - Failed:", {
-          status: response.status,
-          errorData,
-          sentCredentials: {
-            username,
-            hashedPasswordLength: hashedPassword.length,
-            hashedPasswordPrefix: hashedPassword.substring(0, 8) + "...",
-          },
-        })
-      }
-      return null
-    } catch (error) {
-      console.error("Core API authentication with hash error:", error)
-      return null
-    }
-  }
 
   const fetchOfflineDataSources = useCallback(
     async (token: string): Promise<OfflineDataSource[]> => {
@@ -258,101 +185,32 @@ export const DataMappingsManager = ({ tenant, onAuthExpired }: DataMappingsManag
   const loadOfflineDataSources = useCallback(async () => {
     setOfflineDataSourcesLoading(true)
     try {
-      // Check if we have stored credentials
-      const storedTenant = JSON.parse(localStorage.getItem(`tenant-${tenant.id}`) || "{}")
-      if (storedTenant.coreApiUsername && storedTenant.coreApiPassword) {
-        console.log("Load Offline Data Sources - Using stored credentials:", {
-          username: storedTenant.coreApiUsername,
-          hasStoredPassword: !!storedTenant.coreApiPassword,
-          storedPasswordLength: storedTenant.coreApiPassword?.length,
-        })
+      const response = await fetch("/api/core-auth/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tenantId: tenant.id }),
+      })
 
-        // Try to authenticate with stored credentials (already hashed)
-        const token = await authenticateCoreApiWithHash(storedTenant.coreApiUsername, storedTenant.coreApiPassword)
-        if (token) {
-          setCoreApiToken(token)
-          try {
-            const dataSources = await fetchOfflineDataSources(token)
-            setOfflineDataSources(dataSources.filter(ds => ds.isActive === 1))
-          } catch (error) {
-            if (error instanceof Error && error.message === "REAUTH_REQUIRED") {
-              // Token expired, need to re-authenticate
-              const newToken = await authenticateCoreApiWithHash(
-                storedTenant.coreApiUsername,
-                storedTenant.coreApiPassword,
-              )
-              if (newToken) {
-                setCoreApiToken(newToken)
-                const dataSources = await fetchOfflineDataSources(newToken)
-                setOfflineDataSources(dataSources.filter(ds => ds.isActive === 1))
-              } else {
-                console.error("Failed to re-authenticate with Core API")
-                setOfflineDataSources([])
-              }
-            }
-          }
-        } else {
-          // Stored credentials are invalid, prompt for new ones
-          console.warn("Stored credentials are invalid, prompting for new ones")
-          setShowCoreApiCredentials(true)
-        }
-      } else {
-        // No stored credentials, prompt for them
-        console.log("No stored Core API credentials found")
-        setShowCoreApiCredentials(true)
+      if (response.status === 403) {
+        // Core API not configured for this tenant — offline data sources won't be shown
+        return
       }
+
+      if (!response.ok) {
+        console.error("Failed to get Core API token for offline data sources:", response.status)
+        return
+      }
+
+      const { access_token: token } = await response.json()
+      setCoreApiToken(token)
+      const dataSources = await fetchOfflineDataSources(token)
+      setOfflineDataSources(dataSources.filter(ds => ds.isActive === 1))
     } catch (error) {
       console.error("Error loading offline data sources:", error)
-      setOfflineDataSources([])
     } finally {
       setOfflineDataSourcesLoading(false)
     }
   }, [tenant.id, fetchOfflineDataSources])
-
-  const handleCoreApiCredentialsSubmit = async () => {
-    console.log("Core API Credentials Submit - Starting:", {
-      username: coreApiCredentials.username,
-      passwordLength: coreApiCredentials.password.length,
-      timestamp: new Date().toISOString(),
-    })
-
-    // Don't hash here - let authenticateCoreApi handle the hashing
-    const token = await authenticateCoreApi(coreApiCredentials.username, coreApiCredentials.password)
-
-    if (token) {
-      console.log("Core API Credentials Submit - Authentication successful")
-      setCoreApiToken(token)
-
-      // Store credentials in localStorage (with hashed password)
-      const hashedPassword = await hashPassword(coreApiCredentials.password)
-      const storedTenant = JSON.parse(localStorage.getItem(`tenant-${tenant.id}`) || "{}")
-      const updatedTenant = {
-        ...storedTenant,
-        coreApiUsername: coreApiCredentials.username,
-        coreApiPassword: hashedPassword,
-      }
-      localStorage.setItem(`tenant-${tenant.id}`, JSON.stringify(updatedTenant))
-
-      // Fetch offline data sources
-      try {
-        console.log("Handle Core API Credentials Submit - Fetching data sources...")
-        const dataSources = await fetchOfflineDataSources(token)
-        console.log("Handle Core API Credentials Submit - Data sources received:", {
-          dataSourcesLength: dataSources.length,
-          allDataSources: dataSources,
-          activeDataSources: dataSources.filter(ds => ds.isActive === 1),
-        })
-        setOfflineDataSources(dataSources.filter(ds => ds.isActive === 1))
-        setShowCoreApiCredentials(false)
-        setCoreApiCredentials({ username: "", password: "" })
-      } catch (error) {
-        console.error("Failed to fetch offline data sources:", error)
-      }
-    } else {
-      console.error("Core API Credentials Submit - Authentication failed")
-      alert("Authentication failed. Please check your credentials.")
-    }
-  }
 
   const fetchMappings = useCallback(
     async (dataSource: DataSource) => {
@@ -395,7 +253,6 @@ export const DataMappingsManager = ({ tenant, onAuthExpired }: DataMappingsManag
       console.log("Fetching mappings for offline data source:", {
         offlineDataSourceName,
         tenantClientId: tenant.clientId,
-        hasToken: !!coreApiToken,
       })
 
       try {
@@ -430,7 +287,7 @@ export const DataMappingsManager = ({ tenant, onAuthExpired }: DataMappingsManag
         setLoading(false)
       }
     },
-    [tenant.clientId, tenant.apiKey, tenant.apiEndpoint, coreApiToken],
+    [tenant.clientId, tenant.apiKey, tenant.apiEndpoint],
   )
 
   const fetchCurrentMappings = useCallback(() => {
@@ -1562,14 +1419,6 @@ export const DataMappingsManager = ({ tenant, onAuthExpired }: DataMappingsManag
                       selectedOfflineDataSource === dataSource.name ? "bg-background text-foreground shadow-sm" : ""
                     }`}
                     onClick={() => {
-                      console.log("Offline data source tab clicked:", {
-                        dataSourceName: dataSource.name,
-                        hasToken: !!coreApiToken,
-                      })
-                      if (!coreApiToken) {
-                        setShowCoreApiCredentials(true)
-                        return
-                      }
                       setSelectedOfflineDataSource(dataSource.name)
                       setSelectedDataSource("analyze_post") // Reset standard selection
                       trackDetailedUserAction("view", "offline_data_mappings", { dataSource: dataSource.name })
@@ -2022,53 +1871,6 @@ export const DataMappingsManager = ({ tenant, onAuthExpired }: DataMappingsManag
         </DialogContent>
       </Dialog>
 
-      {/* Core API Credentials Dialog */}
-      <Dialog open={showCoreApiCredentials} onOpenChange={setShowCoreApiCredentials}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>CDP Login Required</DialogTitle>
-            <div className="text-sm text-muted-foreground">
-              Enter your CDP UI login credentials to access offline data sources
-            </div>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="core-username">Username</Label>
-              <Input
-                id="core-username"
-                value={coreApiCredentials.username}
-                onChange={e => setCoreApiCredentials(prev => ({ ...prev, username: e.target.value }))}
-                placeholder="Enter your CDP username"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="core-password">Password</Label>
-              <Input
-                id="core-password"
-                type="password"
-                value={coreApiCredentials.password}
-                onChange={e => setCoreApiCredentials(prev => ({ ...prev, password: e.target.value }))}
-                placeholder="Enter your CDP password"
-              />
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setShowCoreApiCredentials(false)
-                  setCoreApiCredentials({ username: "", password: "" })
-                }}>
-                Cancel
-              </Button>
-              <Button
-                onClick={handleCoreApiCredentialsSubmit}
-                disabled={!coreApiCredentials.username || !coreApiCredentials.password}>
-                Login
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

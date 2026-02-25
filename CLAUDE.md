@@ -208,9 +208,10 @@ export const GET = async (request: NextRequest, { params }: { params: Promise<{ 
    - Validation: `validateAuthState()` checks JWT expiration
 
 2. **Core API OAuth2 Token**
-   - Stored in localStorage as `auth-core-token`
-   - Used for data access (offline sources, Core API)
-   - Hardcoded client credentials in `/api/core-auth/token`
+   - Managed server-side in `lib/core-api-token.ts` (in-memory cache, one token per tenant)
+   - Used for data access (offline sources, data sources, customer one view)
+   - Configured via `CORE_API_TENANT_<id>_USERNAME/PASSWORD` env vars per tenant
+   - Features gracefully disabled for tenants without a configured service account
 
 **Password Security**: All passwords must be SHA-256 hashed client-side before transmission using `hashPassword()` from `lib/auth.ts`. Uses Web Crypto API (HTTPS/localhost) with crypto-js fallback.
 
@@ -235,8 +236,7 @@ localStorage: 'cdp-tenant-settings' → {
 // Per-tenant data
 localStorage: `tenant-${tenantId}` → {
   id, name, displayName, clientId,
-  apiKey, apiEndpoint,
-  coreApiUsername, coreApiPassword  // SHA-256 encoded
+  apiKey, apiEndpoint
 }
 
 // Current selection
@@ -357,7 +357,7 @@ const handleDragEnd = (event) => {
 
 1. **Tenant ID Prefixing**: SST mappings API automatically prefixes tenant IDs with "VIZVRM" - don't add manually
 2. **Password Encoding**: Always use `hashPassword()` from `lib/auth.ts` - never send plaintext
-3. **Core API Tokens**: Store in localStorage (not component state like previous docs suggested)
+3. **Core API Tokens**: Managed server-side via `lib/core-api-token.ts` — one cached token per tenant, never stored in browser
 4. **Next.js 15 Params**: Always `await params` in API route handlers
 5. **Auth Expiration**: Handle 401 by clearing localStorage and redirecting - don't retry indefinitely
 6. **Form Data vs JSON**: User creation uses multipart/form-data; all other endpoints use JSON
@@ -370,6 +370,10 @@ Required in `.env.local`:
 ```bash
 ADMIN_API_URL=https://adminbackend.dev.hxcd.now.hclsoftware.cloud
 CORE_API_URL=https://coreapi.dev.hxcd.now.hclsoftware.cloud
+
+# Core API service accounts — one pair per tenant that needs Core API access
+# CORE_API_TENANT_<id>_USERNAME=console-service@tenant.example.com
+# CORE_API_TENANT_<id>_PASSWORD=plaintext-password
 
 # Optional - users can override in UI
 NEXT_PUBLIC_DEFAULT_API_ENDPOINT=https://dmp-sst-api.dev.hxcd.now.hclsoftware.cloud

@@ -42,6 +42,8 @@ The app will be available at `http://localhost:3000`.
 |----------|----------|-------------|
 | `ADMIN_API_URL` | Yes | Admin API backend URL |
 | `CORE_API_URL` | Yes | Core API backend URL |
+| `CORE_API_TENANT_<id>_USERNAME` | No | Service account username for tenant `<id>` (enables Core API features) |
+| `CORE_API_TENANT_<id>_PASSWORD` | No | Service account password for tenant `<id>` (plaintext, hashed server-side) |
 | `NEXT_PUBLIC_DEFAULT_API_ENDPOINT` | No | Default SST API endpoint (overridable in UI) |
 | `NEXT_PUBLIC_DEFAULT_API_KEY` | No | Default SST API key (overridable in UI) |
 | `NEXT_PUBLIC_GA_ID` | No | Google Analytics measurement ID |
@@ -70,12 +72,12 @@ All external API calls are proxied through Next.js API routes (`app/api/`) to th
 
 ### Authentication
 
-Dual authentication system managed via `lib/auth.ts`:
+Dual authentication system:
 
 - **Admin JWT** - stored as `auth-token` in localStorage, used for platform operations
-- **Core OAuth2** - stored as `auth-core-token` in localStorage, used for data access
+- **Core OAuth2** - managed server-side in `lib/core-api-token.ts`; one cached token per tenant using service accounts configured in env vars. Tenants without a configured service account have Core API features (Data Sources, Customer One View, offline Data Mappings) gracefully disabled.
 
-All passwords are SHA-256 hashed client-side before transmission.
+All passwords are SHA-256 hashed before transmission.
 
 ### Multi-Tenant
 
@@ -97,9 +99,10 @@ components/
   ui/               # 49 shadcn/ui components
   *-manager.tsx     # Self-contained manager components (fetching, state, CRUD)
 lib/
-  auth.ts           # Authentication utilities and password hashing
-  analytics.ts      # Google Analytics event tracking
-  utils.ts          # Shared utilities
+  auth.ts               # Authentication utilities and password hashing
+  core-api-token.ts     # Server-side Core API token cache (per-tenant service accounts)
+  analytics.ts          # Google Analytics event tracking
+  utils.ts              # Shared utilities
 types/              # TypeScript type definitions
 hooks/              # Custom React hooks
 ```

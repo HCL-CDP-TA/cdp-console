@@ -30,6 +30,7 @@ import {
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from "@dnd-kit/sortable"
 import { useSortable } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   RefreshCw,
   Save,
@@ -42,9 +43,10 @@ import {
   Plus,
   Check,
   ChevronsUpDown,
+  BookmarkPlus,
+  BookOpen,
 } from "lucide-react"
 import { Tenant } from "@/types/tenant"
-import { validateAuthState, getAuthState } from "@/lib/auth"
 import { trackError, trackAPICall, trackUserAction } from "@/lib/analytics"
 
 interface CustomerOneViewManagerProps {
@@ -56,6 +58,12 @@ interface MappingItem {
   id: string
   key: string // Mapped Profile Attribute
   value: string // Property Name
+}
+
+interface CovTemplate {
+  name: string
+  mappings: { key: string; value: string }[]
+  createdAt: string
 }
 
 // Sortable row component
@@ -109,14 +117,21 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [coreApiToken, setCoreApiToken] = useState<string | null>(null)
+  const [coreApiNotConfigured, setCoreApiNotConfigured] = useState(false)
   const [userProperties, setUserProperties] = useState<string[]>([])
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingItem, setEditingItem] = useState<MappingItem | null>(null)
   const [dialogPropertyName, setDialogPropertyName] = useState("")
   const [dialogMappedAttribute, setDialogMappedAttribute] = useState("")
   const [comboboxOpen, setComboboxOpen] = useState(false)
-  const [showCredentialsDialog, setShowCredentialsDialog] = useState(false)
-  const [credentials, setCredentials] = useState({ username: "", password: "" })
+  const [templates, setTemplates] = useState<CovTemplate[]>([])
+  const [loadingTemplates, setLoadingTemplates] = useState(false)
+  const [isSaveTemplateDialogOpen, setIsSaveTemplateDialogOpen] = useState(false)
+  const [isLoadTemplateDialogOpen, setIsLoadTemplateDialogOpen] = useState(false)
+  const [templateName, setTemplateName] = useState("")
+  const [savingTemplate, setSavingTemplate] = useState(false)
+  const [saveTemplateFilter, setSaveTemplateFilter] = useState("")
+  const [loadTemplateFilter, setLoadTemplateFilter] = useState("")
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -125,100 +140,34 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
     }),
   )
 
-  const authenticateCoreApi = async (username: string, password: string): Promise<string | null> => {
+  const getCoreApiToken = useCallback(async (): Promise<string | null> => {
     try {
-      // Hash the password using SHA-256
-      const encoder = new TextEncoder()
-      const data = encoder.encode(password)
-      const hashBuffer = await crypto.subtle.digest("SHA-256", data)
-      const hashArray = Array.from(new Uint8Array(hashBuffer))
-      const hashedPassword = hashArray.map(b => b.toString(16).padStart(2, "0")).join("")
-
-      // Try to authenticate
       const response = await fetch("/api/core-auth/token", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password: hashedPassword }),
+        body: JSON.stringify({ tenantId: tenant.id }),
       })
 
-      if (response.ok) {
-        const data = await response.json()
-        const token = data.access_token
-        if (token) {
-          // Store credentials for future use
-          const storedTenant = JSON.parse(localStorage.getItem(`tenant-${tenant.id}`) || "{}")
-          storedTenant.coreApiUsername = username
-          storedTenant.coreApiPassword = hashedPassword
-          localStorage.setItem(`tenant-${tenant.id}`, JSON.stringify(storedTenant))
-
-          setCoreApiToken(token)
-          return token
-        }
-      } else {
-        setErrorMessage("Authentication failed. Please check your CDP login credentials.")
+      if (response.status === 403) {
+        setCoreApiNotConfigured(true)
         return null
       }
+
+      if (!response.ok) {
+        setErrorMessage("Core API authentication failed")
+        return null
+      }
+
+      const data = await response.json()
+      const token = data.access_token
+      setCoreApiToken(token)
+      return token
     } catch (error) {
-      console.error("Error authenticating:", error)
-      setErrorMessage("Authentication error. Please try again.")
+      console.error("Error getting Core API token:", error)
+      setErrorMessage("Core API authentication error")
       return null
     }
-    return null
-  }
-
-  const getCoreApiToken = useCallback(async (): Promise<string | null> => {
-    try {
-      // Check auth state first
-      const authResult = await validateAuthState()
-      if (!authResult.isValid) {
-        console.error("Auth validation failed")
-        if (onAuthExpired) {
-          onAuthExpired()
-        }
-        return null
-      }
-
-      // Check if we have stored CDP login credentials
-      const storedTenant = JSON.parse(localStorage.getItem(`tenant-${tenant.id}`) || "{}")
-      if (storedTenant.coreApiUsername && storedTenant.coreApiPassword) {
-        console.log("Customer One View - Using stored CDP credentials")
-
-        // Try to authenticate with stored credentials (already hashed)
-        const response = await fetch("/api/core-auth/token", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            username: storedTenant.coreApiUsername,
-            password: storedTenant.coreApiPassword,
-          }),
-        })
-
-        if (response.ok) {
-          const data = await response.json()
-          const token = data.access_token
-          if (token) {
-            setCoreApiToken(token)
-            return token
-          }
-        } else if (response.status === 401) {
-          // Stored credentials are invalid, prompt for new ones
-          console.warn("Stored CDP credentials are invalid")
-          setShowCredentialsDialog(true)
-          return null
-        }
-      } else {
-        // No stored credentials, prompt for them
-        console.log("No stored CDP credentials found")
-        setShowCredentialsDialog(true)
-        return null
-      }
-    } catch (error) {
-      console.error("Error getting CDP authentication token:", error)
-      setErrorMessage("Authentication error")
-      return null
-    }
-    return null
-  }, [tenant.id, onAuthExpired])
+  }, [tenant.id])
 
   const fetchMappings = useCallback(async () => {
     setLoading(true)
@@ -390,6 +339,81 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mappings, tenant.clientId, coreApiToken, getCoreApiToken])
 
+  const fetchTemplates = useCallback(async () => {
+    setLoadingTemplates(true)
+    try {
+      const response = await fetch(`/api/cov-templates/${tenant.id}`)
+      if (response.ok) {
+        const data = await response.json()
+        setTemplates(data.templates || [])
+      }
+    } catch (error) {
+      console.error("Error fetching COV templates:", error)
+    } finally {
+      setLoadingTemplates(false)
+    }
+  }, [tenant.id])
+
+  const handleSaveAsTemplate = useCallback(async () => {
+    if (!templateName.trim()) return
+    setSavingTemplate(true)
+    try {
+      const response = await fetch(`/api/cov-templates/${tenant.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: templateName.trim(),
+          mappings: mappings.map(m => ({ key: m.key, value: m.value })),
+        }),
+      })
+      if (response.ok) {
+        setSuccessMessage(`Template "${templateName.trim()}" saved successfully`)
+        setIsSaveTemplateDialogOpen(false)
+        setTemplateName("")
+        trackUserAction("save_cov_template", { templateName: templateName.trim(), mappingCount: mappings.length })
+      } else {
+        setErrorMessage("Failed to save template")
+      }
+    } catch (error) {
+      console.error("Error saving COV template:", error)
+      setErrorMessage("Failed to save template")
+    } finally {
+      setSavingTemplate(false)
+    }
+  }, [templateName, mappings, tenant.id])
+
+  const handleLoadTemplate = useCallback((template: CovTemplate) => {
+    const loadedMappings: MappingItem[] = template.mappings.map((m, index) => ({
+      id: `mapping-${index}`,
+      key: m.key,
+      value: m.value,
+    }))
+    setMappings(loadedMappings)
+    setIsLoadTemplateDialogOpen(false)
+    setSuccessMessage(`Template "${template.name}" loaded. Save Changes to persist to Core API.`)
+    trackUserAction("load_cov_template", { templateName: template.name, mappingCount: template.mappings.length })
+  }, [])
+
+  const handleDeleteTemplate = useCallback(
+    async (name: string) => {
+      try {
+        const response = await fetch(`/api/cov-templates/${tenant.id}/${encodeURIComponent(name)}`, {
+          method: "DELETE",
+        })
+        if (response.ok) {
+          setTemplates(prev => prev.filter(t => t.name !== name))
+          trackUserAction("delete_cov_template", { templateName: name })
+        } else {
+          setErrorMessage("Failed to delete template")
+        }
+      } catch (error) {
+        console.error("Error deleting COV template:", error)
+        setErrorMessage("Failed to delete template")
+      }
+    },
+    [tenant.id],
+  )
+
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event
 
@@ -465,35 +489,43 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
     trackUserAction("delete_customer_one_view_mapping", { key: item.key })
   }, [])
 
-  const handleDialogSave = useCallback(() => {
-    if (!dialogPropertyName || !dialogMappedAttribute) {
-      return
-    }
-
-    if (editingItem) {
-      // Edit existing
-      setMappings(items =>
-        items.map(item =>
-          item.id === editingItem.id ? { ...item, key: dialogMappedAttribute, value: dialogPropertyName } : item,
-        ),
-      )
-      trackUserAction("edit_customer_one_view_mapping", { key: dialogMappedAttribute })
-    } else {
-      // Add new
-      const newItem: MappingItem = {
-        id: `mapping-${mappings.length}`,
-        key: dialogMappedAttribute,
-        value: dialogPropertyName,
+  const handleDialogSave = useCallback(
+    (keepOpen = false) => {
+      if (!dialogPropertyName || !dialogMappedAttribute) {
+        return
       }
-      setMappings(items => [...items, newItem])
-      trackUserAction("add_customer_one_view_mapping", { key: dialogMappedAttribute })
-    }
 
-    setIsDialogOpen(false)
-    setEditingItem(null)
-    setDialogPropertyName("")
-    setDialogMappedAttribute("")
-  }, [dialogPropertyName, dialogMappedAttribute, editingItem, mappings.length])
+      if (editingItem) {
+        // Edit existing
+        setMappings(items =>
+          items.map(item =>
+            item.id === editingItem.id ? { ...item, key: dialogMappedAttribute, value: dialogPropertyName } : item,
+          ),
+        )
+        trackUserAction("edit_customer_one_view_mapping", { key: dialogMappedAttribute })
+      } else {
+        // Add new
+        const newItem: MappingItem = {
+          id: `mapping-${mappings.length}`,
+          key: dialogMappedAttribute,
+          value: dialogPropertyName,
+        }
+        setMappings(items => [...items, newItem])
+        trackUserAction("add_customer_one_view_mapping", { key: dialogMappedAttribute })
+      }
+
+      if (keepOpen && !editingItem) {
+        setDialogPropertyName("")
+        setDialogMappedAttribute("")
+      } else {
+        setIsDialogOpen(false)
+        setEditingItem(null)
+        setDialogPropertyName("")
+        setDialogMappedAttribute("")
+      }
+    },
+    [dialogPropertyName, dialogMappedAttribute, editingItem, mappings.length],
+  )
 
   const handleDialogCancel = useCallback(() => {
     setIsDialogOpen(false)
@@ -502,37 +534,55 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
     setDialogMappedAttribute("")
   }, [])
 
-  const handleCredentialsSubmit = async () => {
-    if (!credentials.username || !credentials.password) {
-      return
-    }
-
-    const token = await authenticateCoreApi(credentials.username, credentials.password)
-    if (token) {
-      setShowCredentialsDialog(false)
-      setCredentials({ username: "", password: "" })
-      // Now fetch the data
-      await fetchMappings()
-      await fetchUserProperties()
-    }
-  }
-
   useEffect(() => {
     fetchMappings()
     fetchUserProperties()
   }, [fetchMappings, fetchUserProperties])
 
+  if (coreApiNotConfigured) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 text-muted-foreground gap-2">
+        <p>Customer One View is not configured for this tenant.</p>
+        <p className="text-sm">Contact your administrator to set up Core API access.</p>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3">
         <div>
           <h2 className="text-2xl font-bold text-slate-900">Customer One View</h2>
           <p className="text-slate-600">Manage Customer One View - Basic Details view for {tenant.displayName}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={handleAdd} className="flex items-center gap-2">
             <Plus className="h-4 w-4" />
             Add Property
+          </Button>
+          <Button
+            variant="outline"
+            onClick={async () => {
+              setTemplateName("")
+              setSaveTemplateFilter("")
+              await fetchTemplates()
+              setIsSaveTemplateDialogOpen(true)
+            }}
+            disabled={mappings.length === 0}
+            className="flex items-center gap-2">
+            <BookmarkPlus className="h-4 w-4" />
+            Save as Template
+          </Button>
+          <Button
+            variant="outline"
+            onClick={async () => {
+              setLoadTemplateFilter("")
+              await fetchTemplates()
+              setIsLoadTemplateDialogOpen(true)
+            }}
+            className="flex items-center gap-2">
+            <BookOpen className="h-4 w-4" />
+            Load Template
           </Button>
           <Button variant="outline" onClick={fetchMappings} disabled={loading} className="flex items-center gap-2">
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
@@ -540,7 +590,7 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
           </Button>
           <Button onClick={saveMappings} disabled={saving || mappings.length === 0} className="flex items-center gap-2">
             <Save className="h-4 w-4" />
-            {saving ? "Saving..." : "Save Changes"}
+            {saving ? "Applying..." : "Apply Changes"}
           </Button>
         </div>
       </div>
@@ -693,58 +743,165 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
             <Button variant="outline" onClick={handleDialogCancel}>
               Cancel
             </Button>
-            <Button onClick={handleDialogSave} disabled={!dialogPropertyName || !dialogMappedAttribute}>
+            {!editingItem && (
+              <Button
+                variant="outline"
+                onClick={() => handleDialogSave(true)}
+                disabled={!dialogPropertyName || !dialogMappedAttribute}>
+                Add Another
+              </Button>
+            )}
+            <Button onClick={() => handleDialogSave(false)} disabled={!dialogPropertyName || !dialogMappedAttribute}>
               {editingItem ? "Update" : "Add"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* CDP Login Credentials Dialog */}
-      <Dialog open={showCredentialsDialog} onOpenChange={setShowCredentialsDialog}>
-        <DialogContent className="sm:max-w-md">
+      {/* Save Template Dialog */}
+      <Dialog
+        open={isSaveTemplateDialogOpen}
+        onOpenChange={open => {
+          if (!open) setSaveTemplateFilter("")
+          setIsSaveTemplateDialogOpen(open)
+        }}>
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle>CDP Login Required</DialogTitle>
-            <div className="text-sm text-muted-foreground">
-              Enter your CDP UI login credentials to access Customer One View
-            </div>
+            <DialogTitle>Save as Template</DialogTitle>
+            <DialogDescription>Save the current mappings as a reusable template for this tenant.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4 py-4">
+            {templates.length > 0 && (
+              <div className="space-y-2">
+                <Label>Overwrite existing template</Label>
+                <Input
+                  placeholder="Filter templates..."
+                  value={saveTemplateFilter}
+                  onChange={e => setSaveTemplateFilter(e.target.value)}
+                />
+                <ScrollArea className="max-h-[160px]">
+                  <div className="space-y-1">
+                    {templates
+                      .filter(t => t.name.toLowerCase().includes(saveTemplateFilter.toLowerCase()))
+                      .map(t => (
+                        <button
+                          key={t.name}
+                          type="button"
+                          onClick={() => setTemplateName(t.name)}
+                          className={`w-full text-left px-3 py-2 rounded-md text-sm border transition-colors ${
+                            templateName === t.name
+                              ? "border-slate-900 bg-slate-100 font-medium"
+                              : "border-transparent hover:bg-slate-50 hover:border-slate-200"
+                          }`}>
+                          {t.name}
+                          <span className="ml-2 text-slate-400 font-normal">{t.mappings.length} mappings</span>
+                        </button>
+                      ))}
+                    {templates.filter(t => t.name.toLowerCase().includes(saveTemplateFilter.toLowerCase())).length === 0 && (
+                      <p className="text-sm text-slate-500 px-3 py-2">No templates match.</p>
+                    )}
+                  </div>
+                </ScrollArea>
+              </div>
+            )}
             <div className="space-y-2">
-              <Label htmlFor="cdp-username">Username</Label>
+              <Label htmlFor="templateName">{templates.length > 0 ? "Or save as new template" : "Template Name"}</Label>
               <Input
-                id="cdp-username"
-                value={credentials.username}
-                onChange={e => setCredentials(prev => ({ ...prev, username: e.target.value }))}
-                placeholder="Enter your CDP username"
+                id="templateName"
+                placeholder="e.g., Banking Demo, Retail Config"
+                value={templateName}
+                onChange={e => setTemplateName(e.target.value)}
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="cdp-password">Password</Label>
-              <Input
-                id="cdp-password"
-                type="password"
-                value={credentials.password}
-                onChange={e => setCredentials(prev => ({ ...prev, password: e.target.value }))}
-                placeholder="Enter your CDP password"
-              />
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setShowCredentialsDialog(false)
-                  setCredentials({ username: "", password: "" })
-                }}>
-                Cancel
-              </Button>
-              <Button onClick={handleCredentialsSubmit} disabled={!credentials.username || !credentials.password}>
-                Login
-              </Button>
-            </div>
+            {templateName.trim() && templates.some(t => t.name === templateName.trim()) && (
+              <p className="text-sm text-amber-600">
+                This template will be overwritten.
+              </p>
+            )}
           </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsSaveTemplateDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveAsTemplate} disabled={!templateName.trim() || savingTemplate}>
+              {savingTemplate ? "Saving..." : "Save Template"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Load Template Dialog */}
+      <Dialog
+        open={isLoadTemplateDialogOpen}
+        onOpenChange={open => {
+          if (!open) setLoadTemplateFilter("")
+          setIsLoadTemplateDialogOpen(open)
+        }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Load Template</DialogTitle>
+            <DialogDescription>
+              Select a template to load. This will replace the current mappings in the editor.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            {loadingTemplates ? (
+              <div className="text-center py-8 text-slate-500">
+                <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2" />
+                Loading templates...
+              </div>
+            ) : templates.length === 0 ? (
+              <div className="text-center py-8 text-slate-500">
+                <BookOpen className="h-8 w-8 mx-auto mb-2 text-slate-300" />
+                <p>No templates saved yet.</p>
+                <p className="text-sm">Use &quot;Save as Template&quot; to create one.</p>
+              </div>
+            ) : (
+              <>
+                <Input
+                  placeholder="Filter templates..."
+                  value={loadTemplateFilter}
+                  onChange={e => setLoadTemplateFilter(e.target.value)}
+                  className="mb-3"
+                />
+                <ScrollArea className="max-h-[300px]">
+                <div className="space-y-2">
+                  {templates.filter(t => t.name.toLowerCase().includes(loadTemplateFilter.toLowerCase())).length === 0 ? (
+                    <p className="text-sm text-slate-500 py-4 text-center">No templates match.</p>
+                  ) : templates.filter(t => t.name.toLowerCase().includes(loadTemplateFilter.toLowerCase())).map(template => (
+                    <div
+                      key={template.name}
+                      className="flex items-center justify-between p-3 rounded-lg border hover:bg-slate-50 cursor-pointer group"
+                      onClick={() => handleLoadTemplate(template)}>
+                      <div>
+                        <p className="font-medium">{template.name}</p>
+                        <p className="text-sm text-slate-500">{template.mappings.length} mappings</p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-600 hover:text-red-700 opacity-0 group-hover:opacity-100"
+                        onClick={e => {
+                          e.stopPropagation()
+                          handleDeleteTemplate(template.name)
+                        }}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+                </ScrollArea>
+              </>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsLoadTemplateDialogOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   )
 }

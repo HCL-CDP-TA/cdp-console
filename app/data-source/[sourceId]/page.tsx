@@ -294,36 +294,24 @@ export default function DataSourcePage() {
   // Get core API token
   const getCoreApiToken = async (): Promise<string | null> => {
     try {
-      // Check if we have stored CDP login credentials from any tenant
       const selectedTenantId = localStorage.getItem("selectedTenantId")
       if (!selectedTenantId) {
         console.error("No tenant selected")
         return null
       }
 
-      const storedTenant = JSON.parse(localStorage.getItem(`tenant-${selectedTenantId}`) || "{}")
+      const response = await fetch("/api/core-auth/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tenantId: selectedTenantId }),
+      })
 
-      if (storedTenant.coreApiUsername && storedTenant.coreApiPassword) {
-        console.log("Socket.IO - Using stored CDP credentials from tenant:", selectedTenantId)
-
-        const response = await fetch("/api/core-auth/token", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            username: storedTenant.coreApiUsername,
-            password: storedTenant.coreApiPassword, // Already hashed
-          }),
-        })
-
-        if (response.ok) {
-          const data = await response.json()
-          const token = data.access_token
-          console.log("Socket.IO - Got core token:", token?.substring(0, 30) + `... (length: ${token?.length})`)
-          return token
-        }
+      if (response.ok) {
+        const data = await response.json()
+        return data.access_token
       }
 
-      console.error("No stored CDP credentials found")
+      console.error("Failed to get core API token:", response.status)
       return null
     } catch (error) {
       console.error("Error getting core token:", error)
@@ -338,7 +326,7 @@ export default function DataSourcePage() {
 
       if (!authToken) {
         setConnectionError(
-          "Core API token not found. Please navigate to Data Sources or Customer One View first to authenticate.",
+          "Core API is not configured for this tenant. Contact your administrator to set up Core API access.",
         )
         console.error("Core token is missing! Cannot connect to Socket.IO without core token.")
         return

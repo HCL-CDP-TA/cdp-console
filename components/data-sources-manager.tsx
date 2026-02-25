@@ -5,9 +5,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import {
   RefreshCw,
   AlertCircle,
@@ -24,7 +21,6 @@ import {
   Copy,
 } from "lucide-react"
 import { Tenant } from "@/types/tenant"
-import { validateAuthState } from "@/lib/auth"
 import { trackError, trackAPICall, trackUserAction } from "@/lib/analytics"
 
 interface DataSourcesManagerProps {
@@ -65,103 +61,36 @@ export const DataSourcesManager = ({ tenant, onAuthExpired }: DataSourcesManager
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [coreApiToken, setCoreApiToken] = useState<string | null>(null)
-  const [showCredentialsDialog, setShowCredentialsDialog] = useState(false)
-  const [credentials, setCredentials] = useState({ username: "", password: "" })
-
-  const authenticateCoreApi = async (username: string, password: string): Promise<string | null> => {
-    try {
-      // Hash the password using SHA-256
-      const encoder = new TextEncoder()
-      const data = encoder.encode(password)
-      const hashBuffer = await crypto.subtle.digest("SHA-256", data)
-      const hashArray = Array.from(new Uint8Array(hashBuffer))
-      const hashedPassword = hashArray.map(b => b.toString(16).padStart(2, "0")).join("")
-
-      // Try to authenticate
-      const response = await fetch("/api/core-auth/token", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password: hashedPassword }),
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        const token = data.access_token
-        if (token) {
-          // Store credentials for future use
-          const storedTenant = JSON.parse(localStorage.getItem(`tenant-${tenant.id}`) || "{}")
-          storedTenant.coreApiUsername = username
-          storedTenant.coreApiPassword = hashedPassword
-          localStorage.setItem(`tenant-${tenant.id}`, JSON.stringify(storedTenant))
-
-          setCoreApiToken(token)
-          return token
-        }
-      } else {
-        setErrorMessage("Authentication failed. Please check your CDP login credentials.")
-        return null
-      }
-    } catch (error) {
-      console.error("Error authenticating:", error)
-      setErrorMessage("Authentication error. Please try again.")
-      return null
-    }
-    return null
-  }
+  const [coreApiNotConfigured, setCoreApiNotConfigured] = useState(false)
 
   const getCoreApiToken = useCallback(async (): Promise<string | null> => {
     try {
-      // Check auth state first
-      const authResult = await validateAuthState()
-      if (!authResult.isValid) {
-        console.error("Auth validation failed")
-        if (onAuthExpired) {
-          onAuthExpired()
-        }
+      const response = await fetch("/api/core-auth/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tenantId: tenant.id }),
+      })
+
+      if (response.status === 403) {
+        setCoreApiNotConfigured(true)
         return null
       }
 
-      // Check if we have stored CDP login credentials
-      const storedTenant = JSON.parse(localStorage.getItem(`tenant-${tenant.id}`) || "{}")
-      if (storedTenant.coreApiUsername && storedTenant.coreApiPassword) {
-        console.log("Data Sources - Using stored CDP credentials")
-
-        // Try to authenticate with stored credentials (already hashed)
-        const response = await fetch("/api/core-auth/token", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            username: storedTenant.coreApiUsername,
-            password: storedTenant.coreApiPassword,
-          }),
-        })
-
-        if (response.ok) {
-          const data = await response.json()
-          const token = data.access_token
-          if (token) {
-            setCoreApiToken(token)
-            return token
-          }
-        } else if (response.status === 401) {
-          // Stored credentials are invalid, prompt for new ones
-          console.warn("Stored CDP credentials are invalid")
-          setShowCredentialsDialog(true)
-          return null
-        }
-      } else {
-        // No stored credentials, prompt for them
-        console.log("No stored CDP credentials found")
-        setShowCredentialsDialog(true)
+      if (!response.ok) {
+        setErrorMessage("Core API authentication failed")
         return null
       }
+
+      const data = await response.json()
+      const token = data.access_token
+      setCoreApiToken(token)
+      return token
     } catch (error) {
-      console.error("Error getting CDP authentication token:", error)
-      setErrorMessage("Authentication error")
+      console.error("Error getting Core API token:", error)
+      setErrorMessage("Core API authentication error")
       return null
     }
-    return null
-  }, [tenant.id, onAuthExpired])
+  }, [tenant.id])
 
   const fetchDataSources = useCallback(async () => {
     setLoading(true)
@@ -192,12 +121,7 @@ export const DataSourcesManager = ({ tenant, onAuthExpired }: DataSourcesManager
         setDataSources(result.data || [])
         trackAPICall(`/api/data-sources/${tenant.clientId}`, "GET", true)
       } else if (response.status === 401) {
-        const errorData = await response.json()
-        if (errorData.shouldReauth) {
-          setShowCredentialsDialog(true)
-        } else {
-          setErrorMessage("Authentication failed. Please login again.")
-        }
+        setErrorMessage("Authentication failed. Please try again.")
         trackAPICall(`/api/data-sources/${tenant.clientId}`, "GET", false)
       } else {
         const errorText = await response.text()
@@ -215,20 +139,6 @@ export const DataSourcesManager = ({ tenant, onAuthExpired }: DataSourcesManager
       setLoading(false)
     }
   }, [tenant.clientId, coreApiToken, getCoreApiToken])
-
-  const handleCredentialsSubmit = async () => {
-    if (!credentials.username || !credentials.password) {
-      return
-    }
-
-    const token = await authenticateCoreApi(credentials.username, credentials.password)
-    if (token) {
-      setShowCredentialsDialog(false)
-      setCredentials({ username: "", password: "" })
-      // Now fetch the data
-      await fetchDataSources()
-    }
-  }
 
   const handleSourceClick = (source: SourceInstance) => {
     trackUserAction("view_data_source_details", { sourceId: source.id, sourceName: source.name })
@@ -277,6 +187,15 @@ export const DataSourcesManager = ({ tenant, onAuthExpired }: DataSourcesManager
   useEffect(() => {
     fetchDataSources()
   }, [fetchDataSources])
+
+  if (coreApiNotConfigured) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 text-muted-foreground gap-2">
+        <p>Data Sources is not configured for this tenant.</p>
+        <p className="text-sm">Contact your administrator to set up Core API access.</p>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -373,51 +292,6 @@ export const DataSourcesManager = ({ tenant, onAuthExpired }: DataSourcesManager
         </div>
       )}
 
-      {/* CDP Login Credentials Dialog */}
-      <Dialog open={showCredentialsDialog} onOpenChange={setShowCredentialsDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>CDP Login Required</DialogTitle>
-            <div className="text-sm text-muted-foreground">
-              Enter your CDP UI login credentials to access data sources
-            </div>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="cdp-username">Username</Label>
-              <Input
-                id="cdp-username"
-                value={credentials.username}
-                onChange={e => setCredentials(prev => ({ ...prev, username: e.target.value }))}
-                placeholder="Enter your CDP username"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="cdp-password">Password</Label>
-              <Input
-                id="cdp-password"
-                type="password"
-                value={credentials.password}
-                onChange={e => setCredentials(prev => ({ ...prev, password: e.target.value }))}
-                placeholder="Enter your CDP password"
-              />
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setShowCredentialsDialog(false)
-                  setCredentials({ username: "", password: "" })
-                }}>
-                Cancel
-              </Button>
-              <Button onClick={handleCredentialsSubmit} disabled={!credentials.username || !credentials.password}>
-                Login
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }
