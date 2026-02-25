@@ -10,15 +10,22 @@ services:
         BUILD_DATE: "${BUILD_DATE:-}"
         VCS_REF: "${VCS_REF:-}"
         VERSION: "${VERSION:-latest}"
+        NEXT_PUBLIC_DEFAULT_API_ENDPOINT: "${NEXT_PUBLIC_DEFAULT_API_ENDPOINT:-}"
+        NEXT_PUBLIC_DEFAULT_API_KEY: "${NEXT_PUBLIC_DEFAULT_API_KEY:-}"
+        NEXT_PUBLIC_GA_ID: "${NEXT_PUBLIC_GA_ID:-}"
     container_name: cdp-console
     restart: unless-stopped
     ports:
       - "${PORT:-3100}:3000"
+    volumes:
+      - cdp-console-data:/app/data
     environment:
       - NODE_ENV=${NODE_ENV:-production}
       - PORT=3000
       - ADMIN_API_URL=${ADMIN_API_URL:-}
       - CORE_API_URL=${CORE_API_URL:-}
+      - NEXT_PUBLIC_DEFAULT_API_ENDPOINT=${NEXT_PUBLIC_DEFAULT_API_ENDPOINT:-}
+      - NEXT_PUBLIC_DEFAULT_API_KEY=${NEXT_PUBLIC_DEFAULT_API_KEY:-}
       - NEXT_PUBLIC_GA_ID=${NEXT_PUBLIC_GA_ID:-}
     labels:
       - "app=cdp-console"
@@ -30,6 +37,10 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+
+volumes:
+  cdp-console-data:
+    driver: local
 
 networks:
   default:

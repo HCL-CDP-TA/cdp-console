@@ -82,14 +82,19 @@ cleanup() {
 # Set trap to cleanup on exit
 trap cleanup EXIT
 
-# Load environment variables from .env.local if it exists (before container operations)
+# Load environment variables from .env or .env.local (before container operations)
 if [ -f ".env.local" ]; then
     log_info "Loading environment variables from .env.local"
-    set -a  # automatically export all variables
+    set -a
     source .env.local
     set +a
+elif [ -f ".env" ]; then
+    log_info "Loading environment variables from .env"
+    set -a
+    source .env
+    set +a
 else
-    log_warning "No .env.local file found, using default environment variables"
+    log_warning "No .env or .env.local file found, using default environment variables"
 fi
 
 # Stop and remove existing container if running
@@ -204,6 +209,7 @@ docker run -d \
     --name "$CONTAINER_NAME" \
     --restart unless-stopped \
     -p "$PORT:3000" \
+    -v cdp-console-data:/app/data \
     -e NODE_ENV="$NODE_ENV" \
     -e PORT=3000 \
     -e ADMIN_API_URL="${ADMIN_API_URL:-https://adminbackend.dev.hxcd.now.hclsoftware.cloud}" \

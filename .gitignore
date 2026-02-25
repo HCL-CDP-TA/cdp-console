@@ -43,5 +43,5 @@ next-env.d.ts
 
 /lib/generated/prisma
 
-# Local Netlify folder
-.netlify
+# Template data (persisted via Docker volume)
+/data/cov-templates.json
