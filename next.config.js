@@ -6,6 +6,9 @@ const nextConfig = {
   experimental: {
     turbopackUseSystemTlsCerts: true,
   },
+  turbopack: {
+    root: __dirname,
+  },
 }
 
 module.exports = nextConfig
