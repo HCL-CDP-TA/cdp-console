@@ -205,6 +205,16 @@ esac
 
 # Create and start new container
 log_info "Starting new container on port $PORT"
+
+# Collect all CORE_API_TENANT_* credentials dynamically (supports any number of tenants)
+TENANT_ENV_ARGS=()
+for var in $(compgen -e | grep '^CORE_API_TENANT_'); do
+    TENANT_ENV_ARGS+=(-e "${var}=${!var}")
+done
+if [ ${#TENANT_ENV_ARGS[@]} -gt 0 ]; then
+    log_info "Passing ${#TENANT_ENV_ARGS[@]} CORE_API_TENANT_* environment variable(s) to container"
+fi
+
 docker run -d \
     --name "$CONTAINER_NAME" \
     --restart unless-stopped \
@@ -217,6 +227,7 @@ docker run -d \
     -e NEXT_PUBLIC_DEFAULT_API_ENDPOINT="${NEXT_PUBLIC_DEFAULT_API_ENDPOINT:-https://dmp-sst-api.dev.hxcd.now.hclsoftware.cloud}" \
     -e NEXT_PUBLIC_DEFAULT_API_KEY="${NEXT_PUBLIC_DEFAULT_API_KEY:-}" \
     -e NEXT_PUBLIC_GA_ID="${NEXT_PUBLIC_GA_ID:-}" \
+    "${TENANT_ENV_ARGS[@]}" \
     --label "app=$APP_NAME" \
     --label "environment=$ENVIRONMENT" \
     --label "version=$VERSION" \
