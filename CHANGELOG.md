@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.1.0](https://github.com/HCL-CDP-TA/cdp-console/compare/v1.0.2...v1.1.0) (2026-02-27)
+
+
+### Features
+
+* **api:** add server-side Core API service accounts per tenant ([bab86b7](https://github.com/HCL-CDP-TA/cdp-console/commit/bab86b79524caef5e0093e8e6147a0b50bd07083))
+* **cov-templates:** persist COV templates server-side with Docker volume ([f38174a](https://github.com/HCL-CDP-TA/cdp-console/commit/f38174a1bdfabcc76c167e6da0199ae171fbe371))
+
+
+### Bug Fixes
+
+* **tenant:** use SST API label and apply env var defaults to settings ([612b9a8](https://github.com/HCL-CDP-TA/cdp-console/commit/612b9a806cab598350e168b5f9513356894ddb9b))
+
 ## [1.0.2](https://github.com/HCL-CDP-TA/cdp-console/compare/v1.0.1...v1.0.2) (2026-02-24)
 
 
