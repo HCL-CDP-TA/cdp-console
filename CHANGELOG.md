@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.1](https://github.com/HCL-CDP-TA/cdp-console/compare/v1.1.0...v1.1.1) (2026-02-27)
+
+
+### Bug Fixes
+
+* **auth:** remove stale core API token fetch from login form ([373ef69](https://github.com/HCL-CDP-TA/cdp-console/commit/373ef6970746be8e311b324e8ca9f63b8d62e9c4))
+* improved selection of tenant ([7d04c40](https://github.com/HCL-CDP-TA/cdp-console/commit/7d04c40fa0e77c3acdae5d974b0039272b125e50))
+
 ## [1.1.0](https://github.com/HCL-CDP-TA/cdp-console/compare/v1.0.2...v1.1.0) (2026-02-27)
 
 
