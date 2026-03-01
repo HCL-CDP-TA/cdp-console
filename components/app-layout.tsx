@@ -70,6 +70,22 @@ export default function AppLayout({ children }: AppLayoutProps) {
     }
   }, [])
 
+  // Re-read tenant settings when they are updated elsewhere (e.g. TenantManager)
+  useEffect(() => {
+    const handleSettingsUpdated = () => {
+      const savedSettings = localStorage.getItem("cdp-tenant-settings")
+      if (savedSettings) {
+        try {
+          setTenantSettings(JSON.parse(savedSettings))
+        } catch (e) {
+          console.error("Failed to parse tenant settings:", e)
+        }
+      }
+    }
+    window.addEventListener("cdp-settings-updated", handleSettingsUpdated)
+    return () => window.removeEventListener("cdp-settings-updated", handleSettingsUpdated)
+  }, [])
+
   // Check authentication on mount
   useEffect(() => {
     const checkAuth = async () => {

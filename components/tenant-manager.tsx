@@ -22,6 +22,7 @@ export const TenantManager = ({ onSettingsUpdated, onAuthExpired, onTenantSelect
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false)
   const [showApiKey, setShowApiKey] = useState(false)
@@ -80,6 +81,7 @@ export const TenantManager = ({ onSettingsUpdated, onAuthExpired, onTenantSelect
   const saveSettings = (newSettings: TenantSettings) => {
     setTenantSettings(newSettings)
     localStorage.setItem("cdp-tenant-settings", JSON.stringify(newSettings))
+    window.dispatchEvent(new CustomEvent("cdp-settings-updated"))
     onSettingsUpdated?.()
   }
 
@@ -196,14 +198,9 @@ export const TenantManager = ({ onSettingsUpdated, onAuthExpired, onTenantSelect
       client.id.toString().includes(searchTerm),
   )
 
-  const favoriteClients = filteredClients.filter(client =>
-    tenantSettings.favoriteTenants.includes(client.id.toString()),
-  )
-
-  // When searching, show all filtered results. When not searching, exclude favorites from "All Tenants"
-  const otherClients = searchTerm
-    ? filteredClients // Show all filtered results when searching
-    : filteredClients.filter(client => !tenantSettings.favoriteTenants.includes(client.id.toString()))
+  const displayedClients = showFavoritesOnly
+    ? filteredClients.filter(client => tenantSettings.favoriteTenants.includes(client.id.toString()))
+    : filteredClients
 
   return (
     <div className="space-y-6">
@@ -285,15 +282,24 @@ export const TenantManager = ({ onSettingsUpdated, onAuthExpired, onTenantSelect
         </Card>
       )}
 
-      {/* Search */}
-      <div className="relative">
-        <Search className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
-        <Input
-          placeholder="Search by tenant name, ID, or display name..."
-          value={searchTerm}
-          onChange={e => setSearchTerm(e.target.value)}
-          className="pl-10"
-        />
+      {/* Search and Filter */}
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <Search className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
+          <Input
+            placeholder="Search by tenant name, ID, or display name..."
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+        <Button
+          variant={showFavoritesOnly ? "default" : "outline"}
+          onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
+          className="flex items-center gap-2 flex-shrink-0">
+          <Star className={`h-4 w-4 ${showFavoritesOnly ? "fill-current" : ""}`} />
+          Favourites
+        </Button>
       </div>
 
       {loading && (
@@ -307,139 +313,81 @@ export const TenantManager = ({ onSettingsUpdated, onAuthExpired, onTenantSelect
       )}
 
       {!loading && clients.length > 0 && (
-        <>
-          {/* Favorites */}
-          {favoriteClients.length > 0 && !searchTerm && (
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <Star className="h-5 w-5 text-yellow-500 fill-current" />
-                <h3 className="text-lg font-semibold text-slate-900">Favorite Tenants ({favoriteClients.length})</h3>
-              </div>
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {favoriteClients.map(client => (
-                  <Card
-                    key={client.id}
-                    className="border border-yellow-200 bg-yellow-50 cursor-pointer hover:shadow-md transition-all duration-200"
-                    onClick={() => handleTenantSelect(client)}>
-                    <CardHeader className="pb-3">
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <Building2 className="h-5 w-5 text-slate-600 flex-shrink-0" />
-                          <CardTitle className="text-lg truncate">{client.DisplayName}</CardTitle>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={e => {
-                            e.stopPropagation()
-                            toggleFavorite(client.id.toString())
-                          }}
-                          className="text-yellow-600 hover:text-yellow-700 flex-shrink-0">
-                          <Star className="h-4 w-4 fill-current" />
-                        </Button>
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold text-slate-900">
+            {showFavoritesOnly
+              ? `Favourite Tenants (${displayedClients.length})`
+              : searchTerm
+              ? `Search Results (${displayedClients.length})`
+              : `Available Tenants (${displayedClients.length})`}
+          </h3>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {displayedClients.map(client => {
+              const isFavorite = tenantSettings.favoriteTenants.includes(client.id.toString())
+              return (
+                <Card
+                  key={client.id}
+                  className={`hover:shadow-md transition-all duration-200 cursor-pointer ${
+                    isFavorite ? "border border-yellow-200 bg-yellow-50" : ""
+                  }`}
+                  onClick={() => handleTenantSelect(client)}>
+                  <CardHeader className="pb-3">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Building2 className="h-5 w-5 text-slate-600 flex-shrink-0" />
+                        <CardTitle className="text-lg truncate">{client.DisplayName}</CardTitle>
+                        {isFavorite && <Star className="h-4 w-4 text-yellow-500 fill-current flex-shrink-0" />}
                       </div>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      <div className="flex items-center gap-2 text-sm text-slate-600">
-                        <User className="h-4 w-4" />
-                        <span>Name:</span>
-                        <span className="truncate">{client.Name}</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm text-slate-600">
-                        <User className="h-4 w-4" />
-                        <span>Client ID:</span>
-                        <Badge variant="outline" className="text-xs">
-                          {client.id}
-                        </Badge>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm text-slate-600">
-                        <Badge variant={client.Status === "ACTIVE" ? "default" : "secondary"} className="text-xs">
-                          {client.Status}
-                        </Badge>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* All Tenants */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold text-slate-900">
-              {searchTerm
-                ? `Search Results (${filteredClients.length})`
-                : favoriteClients.length > 0
-                ? "All Tenants"
-                : "Available Tenants"}{" "}
-              {!searchTerm && `(${filteredClients.length})`}
-            </h3>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {otherClients.map(client => {
-                const isFavorite = tenantSettings.favoriteTenants.includes(client.id.toString())
-                return (
-                  <Card
-                    key={client.id}
-                    className={`hover:shadow-md transition-all duration-200 cursor-pointer ${
-                      isFavorite ? "border border-yellow-200 bg-yellow-50" : ""
-                    }`}
-                    onClick={() => handleTenantSelect(client)}>
-                    <CardHeader className="pb-3">
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <Building2 className="h-5 w-5 text-slate-600 flex-shrink-0" />
-                          <CardTitle className="text-lg truncate">{client.DisplayName}</CardTitle>
-                          {isFavorite && <Star className="h-4 w-4 text-yellow-500 fill-current flex-shrink-0" />}
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={e => {
-                            e.stopPropagation()
-                            toggleFavorite(client.id.toString())
-                          }}
-                          className={`flex-shrink-0 ${
-                            isFavorite
-                              ? "text-yellow-600 hover:text-yellow-700"
-                              : "text-slate-400 hover:text-yellow-500"
-                          }`}>
-                          <Star className={`h-4 w-4 ${isFavorite ? "fill-current" : ""}`} />
-                        </Button>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      <div className="flex items-center gap-2 text-sm text-slate-600">
-                        <User className="h-4 w-4" />
-                        <span>Name:</span>
-                        <span className="truncate">{client.Name}</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm text-slate-600">
-                        <User className="h-4 w-4" />
-                        <span>Client ID:</span>
-                        <Badge variant="outline" className="text-xs">
-                          {client.id}
-                        </Badge>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm text-slate-600">
-                        <Badge variant={client.Status === "ACTIVE" ? "default" : "secondary"} className="text-xs">
-                          {client.Status}
-                        </Badge>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )
-              })}
-            </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={e => {
+                          e.stopPropagation()
+                          toggleFavorite(client.id.toString())
+                        }}
+                        className={`flex-shrink-0 ${
+                          isFavorite
+                            ? "text-yellow-600 hover:text-yellow-700"
+                            : "text-slate-400 hover:text-yellow-500"
+                        }`}>
+                        <Star className={`h-4 w-4 ${isFavorite ? "fill-current" : ""}`} />
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="flex items-center gap-2 text-sm text-slate-600">
+                      <User className="h-4 w-4" />
+                      <span>Name:</span>
+                      <span className="truncate">{client.Name}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-slate-600">
+                      <User className="h-4 w-4" />
+                      <span>Client ID:</span>
+                      <Badge variant="outline" className="text-xs">
+                        {client.id}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-slate-600">
+                      <Badge variant={client.Status === "ACTIVE" ? "default" : "secondary"} className="text-xs">
+                        {client.Status}
+                      </Badge>
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            })}
           </div>
-        </>
+        </div>
       )}
 
-      {!loading && filteredClients.length === 0 && clients.length > 0 && (
+      {!loading && displayedClients.length === 0 && clients.length > 0 && (
         <Card>
           <CardContent className="p-8 text-center">
             <Building2 className="h-12 w-12 text-slate-400 mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-slate-900 mb-2">No Tenants Found</h3>
-            <p className="text-slate-600">No tenants match your search criteria.</p>
+            <p className="text-slate-600">
+              {showFavoritesOnly ? "You have no favourite tenants." : "No tenants match your search criteria."}
+            </p>
           </CardContent>
         </Card>
       )}
