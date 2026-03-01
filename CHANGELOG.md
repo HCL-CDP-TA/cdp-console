@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/HCL-CDP-TA/cdp-console/compare/v1.1.2...v1.2.0) (2026-03-01)
+
+
+### Features
+
+* **tenants:** inline favourite highlighting with filter toggle ([19338d7](https://github.com/HCL-CDP-TA/cdp-console/commit/19338d720cf79e688c8784e50f25cf0f8d3d112b))
+
 ## [1.1.2](https://github.com/HCL-CDP-TA/cdp-console/compare/v1.1.1...v1.1.2) (2026-02-27)
 
 
