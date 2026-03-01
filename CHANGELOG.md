@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.2](https://github.com/HCL-CDP-TA/cdp-console/compare/v1.1.1...v1.1.2) (2026-02-27)
+
+
+### Bug Fixes
+
+* **deployment:** forward CORE_API_TENANT_* credentials to container ([52a6bb6](https://github.com/HCL-CDP-TA/cdp-console/commit/52a6bb6c10e5cc3161d68f7a349a3e8437330fce))
+
 ## [1.1.1](https://github.com/HCL-CDP-TA/cdp-console/compare/v1.1.0...v1.1.1) (2026-02-27)
 
 
