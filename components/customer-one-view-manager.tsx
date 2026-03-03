@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   DndContext,
   closestCenter,
@@ -45,6 +46,10 @@ import {
   ChevronsUpDown,
   BookmarkPlus,
   BookOpen,
+  Lock,
+  LockOpen,
+  Copy,
+  Shield,
 } from "lucide-react"
 import { Tenant } from "@/types/tenant"
 import { trackError, trackAPICall, trackUserAction } from "@/lib/analytics"
@@ -56,14 +61,16 @@ interface CustomerOneViewManagerProps {
 
 interface MappingItem {
   id: string
-  key: string // Mapped Profile Attribute
-  value: string // Property Name
+  key: string
+  value: string
 }
 
 interface CovTemplate {
   name: string
   mappings: { key: string; value: string }[]
   createdAt: string
+  type: "master" | "user"
+  description?: string
 }
 
 // Sortable row component
@@ -71,10 +78,12 @@ const SortableRow = ({
   item,
   onEdit,
   onDelete,
+  isInvalid,
 }: {
   item: MappingItem
   onEdit: (item: MappingItem) => void
   onDelete: (item: MappingItem) => void
+  isInvalid?: boolean
 }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id })
 
@@ -85,7 +94,10 @@ const SortableRow = ({
   }
 
   return (
-    <TableRow ref={setNodeRef} style={style} className={`${isDragging ? "z-50" : ""} hover:bg-slate-50`}>
+    <TableRow
+      ref={setNodeRef}
+      style={style}
+      className={`${isDragging ? "z-50" : ""} ${isInvalid ? "bg-red-50 hover:bg-red-100" : "hover:bg-slate-50"}`}>
       <TableCell>
         <div
           {...attributes}
@@ -95,7 +107,12 @@ const SortableRow = ({
         </div>
       </TableCell>
       <TableCell className="font-medium">{item.value}</TableCell>
-      <TableCell>{item.key}</TableCell>
+      <TableCell>
+        <div className="flex items-center gap-1.5">
+          {isInvalid && <AlertCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />}
+          <span className={isInvalid ? "text-red-700" : ""}>{item.key}</span>
+        </div>
+      </TableCell>
       <TableCell>
         <div className="flex gap-1">
           <Button variant="ghost" size="sm" onClick={() => onEdit(item)}>
@@ -133,12 +150,51 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
   const [saveTemplateFilter, setSaveTemplateFilter] = useState("")
   const [loadTemplateFilter, setLoadTemplateFilter] = useState("")
 
+  // Admin mode
+  const [adminMode, setAdminMode] = useState(false)
+  const [adminPassword, setAdminPin] = useState("")
+  const [adminPasswordInput, setAdminPinInput] = useState("")
+  const [adminPasswordError, setAdminPasswordError] = useState("")
+  const [isAdminUnlockDialogOpen, setIsAdminUnlockDialogOpen] = useState(false)
+  const [verifyingPassword, setVerifyingPin] = useState(false)
+
+  // Editing master template state
+  const [editingMasterTemplate, setEditingMasterTemplate] = useState<string | null>(null)
+  const [saveAsMaster, setSaveAsMaster] = useState(false)
+
+  // Copy master dialog
+  const [isCopyMasterDialogOpen, setIsCopyMasterDialogOpen] = useState(false)
+  const [copyMasterSource, setCopyMasterSource] = useState<CovTemplate | null>(null)
+  const [copyMasterName, setCopyMasterName] = useState("")
+  const [isCopyingMaster, setIsCopyingMaster] = useState(false)
+
+  // Delete master confirm
+  const [masterToDelete, setMasterToDelete] = useState<string | null>(null)
+  const [isDeletingMaster, setIsDeletingMaster] = useState(false)
+
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     }),
   )
+
+  useEffect(() => {
+    const storedPin = sessionStorage.getItem("cov-admin-password")
+    if (storedPin) {
+      setAdminMode(true)
+      setAdminPin(storedPin)
+    }
+  }, [])
+
+  const masterTemplates = templates.filter(t => t.type === "master")
+  const userTemplates = templates.filter(t => t.type === "user")
+
+  const invalidMappingKeys =
+    userProperties.length > 0
+      ? Array.from(new Set(mappings.filter(m => !userProperties.includes(m.key)).map(m => m.key)))
+      : []
+  const hasInvalidMappings = invalidMappingKeys.length > 0
 
   const getCoreApiToken = useCallback(async (): Promise<string | null> => {
     try {
@@ -176,16 +232,14 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
     try {
       console.log("Fetching Customer One View mappings for tenant:", tenant.clientId)
 
-      // Get or reuse Core API token
       let token = coreApiToken
       if (!token) {
         token = await getCoreApiToken()
         if (!token) {
-          return // Error already set by getCoreApiToken
+          return
         }
       }
 
-      // Now fetch Customer One View data
       const customerOneViewResponse = await fetch(`/api/customer-one-view/${tenant.clientId}`, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -197,8 +251,6 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
         const data = await customerOneViewResponse.json()
         console.log("Received Customer One View data:", JSON.stringify(data, null, 2))
 
-        // Transform the data into mapping items
-        // Handle different possible response structures
         let dataPointMapping = null
 
         if (data.data && Array.isArray(data.data) && data.data.length > 0) {
@@ -216,7 +268,6 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
           let parsedMapping: Record<string, string> = {}
 
           try {
-            // Check if it's already an object or needs parsing
             if (typeof dataPointMapping === "string") {
               console.log("Parsing DataPointMapping string:", dataPointMapping)
               parsedMapping = JSON.parse(dataPointMapping)
@@ -233,7 +284,6 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
             return
           }
 
-          // Convert to array maintaining order
           const mappingItems: MappingItem[] = Object.entries(parsedMapping).map(([key, value], index) => ({
             id: `mapping-${index}`,
             key,
@@ -277,16 +327,14 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
     try {
       console.log("Saving Customer One View mappings for tenant:", tenant.clientId)
 
-      // Get or reuse Core API token
       let token = coreApiToken
       if (!token) {
         token = await getCoreApiToken()
         if (!token) {
-          return // Error already set by getCoreApiToken
+          return
         }
       }
 
-      // Convert mappings array back to object, preserving order
       const mappingData: Record<string, string> = {}
       mappings.forEach(item => {
         mappingData[item.key] = item.value
@@ -354,9 +402,72 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
     }
   }, [tenant.id])
 
+  const handleVerifyPin = useCallback(async () => {
+    if (!adminPasswordInput.trim()) return
+    setVerifyingPin(true)
+    setAdminPasswordError("")
+    try {
+      const response = await fetch(`/api/cov-templates/${tenant.id}/masters/verify`, {
+        headers: { "x-master-password": adminPasswordInput },
+      })
+      if (response.ok) {
+        setAdminMode(true)
+        setAdminPin(adminPasswordInput)
+        sessionStorage.setItem("cov-admin-password", adminPasswordInput)
+        setIsAdminUnlockDialogOpen(false)
+        setAdminPinInput("")
+      } else {
+        setAdminPasswordError("Incorrect password")
+      }
+    } catch {
+      setAdminPasswordError("Failed to verify PIN")
+    } finally {
+      setVerifyingPin(false)
+    }
+  }, [adminPasswordInput, tenant.id])
+
+  const handleExitAdminMode = useCallback(() => {
+    setAdminMode(false)
+    setAdminPin("")
+    sessionStorage.removeItem("cov-admin-password")
+    setEditingMasterTemplate(null)
+    setSaveAsMaster(false)
+  }, [])
+
   const handleSaveAsTemplate = useCallback(async () => {
     if (!templateName.trim()) return
     setSavingTemplate(true)
+
+    if (saveAsMaster) {
+      try {
+        const response = await fetch(`/api/cov-templates/${tenant.id}/masters`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-master-password": adminPassword,
+          },
+          body: JSON.stringify({
+            name: templateName.trim(),
+            mappings: mappings.map(m => ({ key: m.key, value: m.value })),
+          }),
+        })
+        if (response.ok) {
+          setSuccessMessage(`Master template "${templateName.trim()}" saved`)
+          setIsSaveTemplateDialogOpen(false)
+          setTemplateName("")
+          setSaveAsMaster(false)
+          if (editingMasterTemplate) setEditingMasterTemplate(null)
+        } else {
+          setErrorMessage("Failed to save master template")
+        }
+      } catch {
+        setErrorMessage("Failed to save master template")
+      } finally {
+        setSavingTemplate(false)
+      }
+      return
+    }
+
     try {
       const response = await fetch(`/api/cov-templates/${tenant.id}`, {
         method: "POST",
@@ -371,16 +482,18 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
         setIsSaveTemplateDialogOpen(false)
         setTemplateName("")
         trackUserAction("save_cov_template", { templateName: templateName.trim(), mappingCount: mappings.length })
+      } else if (response.status === 400) {
+        const data = await response.json()
+        setErrorMessage(data.error || "Failed to save template")
       } else {
         setErrorMessage("Failed to save template")
       }
-    } catch (error) {
-      console.error("Error saving COV template:", error)
+    } catch {
       setErrorMessage("Failed to save template")
     } finally {
       setSavingTemplate(false)
     }
-  }, [templateName, mappings, tenant.id])
+  }, [templateName, mappings, tenant.id, saveAsMaster, adminPassword, editingMasterTemplate])
 
   const handleLoadTemplate = useCallback((template: CovTemplate) => {
     const loadedMappings: MappingItem[] = template.mappings.map((m, index) => ({
@@ -390,7 +503,7 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
     }))
     setMappings(loadedMappings)
     setIsLoadTemplateDialogOpen(false)
-    setSuccessMessage(`Template "${template.name}" loaded. Save Changes to persist to Core API.`)
+    setSuccessMessage(`Template "${template.name}" loaded. Apply Changes to persist to CDP.`)
     trackUserAction("load_cov_template", { templateName: template.name, mappingCount: template.mappings.length })
   }, [])
 
@@ -414,6 +527,82 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
     [tenant.id],
   )
 
+  const handleOpenCopyMaster = useCallback((template: CovTemplate) => {
+    setCopyMasterSource(template)
+    setCopyMasterName(`${template.name} (copy)`)
+    setIsCopyMasterDialogOpen(true)
+  }, [])
+
+  const handleConfirmCopyMaster = useCallback(async () => {
+    if (!copyMasterSource || !copyMasterName.trim()) return
+    setIsCopyingMaster(true)
+    try {
+      const response = await fetch(`/api/cov-templates/${tenant.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: copyMasterName.trim(),
+          mappings: copyMasterSource.mappings,
+        }),
+      })
+      if (response.ok) {
+        setSuccessMessage(`Copied "${copyMasterSource.name}" as "${copyMasterName.trim()}"`)
+        setIsCopyMasterDialogOpen(false)
+        setCopyMasterSource(null)
+        setCopyMasterName("")
+        await fetchTemplates()
+        trackUserAction("copy_master_cov_template", {
+          sourceName: copyMasterSource.name,
+          newName: copyMasterName.trim(),
+        })
+      } else if (response.status === 400) {
+        const data = await response.json()
+        setErrorMessage(data.error || "Failed to copy template")
+      } else {
+        setErrorMessage("Failed to copy template")
+      }
+    } catch {
+      setErrorMessage("Failed to copy template")
+    } finally {
+      setIsCopyingMaster(false)
+    }
+  }, [copyMasterSource, copyMasterName, tenant.id, fetchTemplates])
+
+  const handleEditMaster = useCallback((template: CovTemplate) => {
+    const loadedMappings: MappingItem[] = template.mappings.map((m, index) => ({
+      id: `mapping-${index}`,
+      key: m.key,
+      value: m.value,
+    }))
+    setMappings(loadedMappings)
+    setEditingMasterTemplate(template.name)
+    setIsLoadTemplateDialogOpen(false)
+    setSuccessMessage(`Loaded master template "${template.name}" for editing.`)
+  }, [])
+
+  const handleConfirmDeleteMaster = useCallback(async () => {
+    if (!masterToDelete) return
+    setIsDeletingMaster(true)
+    try {
+      const response = await fetch(`/api/cov-templates/${tenant.id}/masters/${encodeURIComponent(masterToDelete)}`, {
+        method: "DELETE",
+        headers: { "x-master-password": adminPassword },
+      })
+      if (response.ok) {
+        setTemplates(prev => prev.filter(t => t.name !== masterToDelete))
+        setSuccessMessage(`Master template "${masterToDelete}" deleted`)
+        setMasterToDelete(null)
+        trackUserAction("delete_master_cov_template", { templateName: masterToDelete })
+      } else {
+        setErrorMessage("Failed to delete master template")
+      }
+    } catch {
+      setErrorMessage("Failed to delete master template")
+    } finally {
+      setIsDeletingMaster(false)
+    }
+  }, [masterToDelete, tenant.id, adminPassword])
+
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event
 
@@ -424,7 +613,6 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
 
         const newItems = arrayMove(items, oldIndex, newIndex)
 
-        // Update IDs to maintain order
         const updatedItems = newItems.map((item: MappingItem, index: number) => ({
           ...item,
           id: `mapping-${index}`,
@@ -496,7 +684,6 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
       }
 
       if (editingItem) {
-        // Edit existing
         setMappings(items =>
           items.map(item =>
             item.id === editingItem.id ? { ...item, key: dialogMappedAttribute, value: dialogPropertyName } : item,
@@ -504,7 +691,6 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
         )
         trackUserAction("edit_customer_one_view_mapping", { key: dialogMappedAttribute })
       } else {
-        // Add new
         const newItem: MappingItem = {
           id: `mapping-${mappings.length}`,
           key: dialogMappedAttribute,
@@ -548,13 +734,40 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
     )
   }
 
+  const saveNameMatchesMaster = masterTemplates.some(t => t.name === templateName.trim())
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-900">Customer One View</h2>
-          <p className="text-slate-600">Manage Customer One View - Basic Details view for {tenant.displayName}</p>
+        <div className="flex items-start justify-between">
+          <div>
+            <h2 className="text-2xl font-bold text-slate-900">Customer One View</h2>
+            <p className="text-slate-600">Manage Customer One View - Basic Details view for {tenant.displayName}</p>
+          </div>
+          {adminMode && (
+            <div className="flex items-center gap-2 px-2 py-1 bg-amber-50 border border-amber-200 rounded text-amber-700 text-xs font-medium">
+              <Shield className="h-3 w-3" />
+              Admin mode
+            </div>
+          )}
         </div>
+
+        {editingMasterTemplate && (
+          <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-md text-amber-700 text-sm">
+            <Shield className="h-4 w-4 shrink-0" />
+            <span>
+              Editing master template: <strong>{editingMasterTemplate}</strong>
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="ml-auto h-6 text-amber-700 hover:text-amber-800 hover:bg-amber-100"
+              onClick={() => setEditingMasterTemplate(null)}>
+              Cancel edit
+            </Button>
+          </div>
+        )}
+
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={handleAdd} className="flex items-center gap-2">
             <Plus className="h-4 w-4" />
@@ -563,8 +776,9 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
           <Button
             variant="outline"
             onClick={async () => {
-              setTemplateName("")
+              setTemplateName(editingMasterTemplate || "")
               setSaveTemplateFilter("")
+              setSaveAsMaster(adminMode && !!editingMasterTemplate)
               await fetchTemplates()
               setIsSaveTemplateDialogOpen(true)
             }}
@@ -588,7 +802,10 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             Refresh
           </Button>
-          <Button onClick={saveMappings} disabled={saving || mappings.length === 0} className="flex items-center gap-2">
+          <Button
+            onClick={saveMappings}
+            disabled={saving || mappings.length === 0 || hasInvalidMappings}
+            className="flex items-center gap-2">
             <Save className="h-4 w-4" />
             {saving ? "Applying..." : "Apply Changes"}
           </Button>
@@ -620,6 +837,21 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
             onClick={() => setErrorMessage(null)}>
             ×
           </Button>
+        </Alert>
+      )}
+
+      {hasInvalidMappings && (
+        <Alert className="border-amber-200 bg-amber-50">
+          <AlertCircle className="h-4 w-4 text-amber-600" />
+          <AlertDescription className="text-amber-700">
+            <span className="font-medium">
+              {invalidMappingKeys.length} mapping{invalidMappingKeys.length !== 1 ? "s reference" : " references"}{" "}
+              {invalidMappingKeys.length !== 1 ? "properties" : "a property"} that{" "}
+              {invalidMappingKeys.length !== 1 ? "don't" : "doesn't"} exist in this tenant:
+            </span>{" "}
+            {invalidMappingKeys.join(", ")}. Remove {invalidMappingKeys.length !== 1 ? "them" : "it"} before applying
+            changes.
+          </AlertDescription>
         </Alert>
       )}
 
@@ -656,7 +888,13 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
                   <TableBody>
                     <SortableContext items={mappings.map(item => item.id)} strategy={verticalListSortingStrategy}>
                       {mappings.map(item => (
-                        <SortableRow key={item.id} item={item} onEdit={handleEdit} onDelete={handleDelete} />
+                        <SortableRow
+                          key={item.id}
+                          item={item}
+                          onEdit={handleEdit}
+                          onDelete={handleDelete}
+                          isInvalid={invalidMappingKeys.includes(item.key)}
+                        />
                       ))}
                     </SortableContext>
                   </TableBody>
@@ -667,6 +905,7 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
         </CardContent>
       </Card>
 
+      {/* Add/Edit Property Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -762,7 +1001,10 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
       <Dialog
         open={isSaveTemplateDialogOpen}
         onOpenChange={open => {
-          if (!open) setSaveTemplateFilter("")
+          if (!open) {
+            setSaveTemplateFilter("")
+            setSaveAsMaster(false)
+          }
           setIsSaveTemplateDialogOpen(open)
         }}>
         <DialogContent>
@@ -771,7 +1013,25 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
             <DialogDescription>Save the current mappings as a reusable template for this tenant.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            {templates.length > 0 && (
+            {adminMode && (
+              <div className="flex items-center gap-2 p-3 border rounded-md bg-amber-50 border-amber-200">
+                <Checkbox
+                  id="saveAsMaster"
+                  checked={saveAsMaster}
+                  onCheckedChange={v => {
+                    setSaveAsMaster(!!v)
+                    setTemplateName(v && editingMasterTemplate ? editingMasterTemplate : "")
+                  }}
+                />
+                <Label htmlFor="saveAsMaster" className="text-amber-800 cursor-pointer">
+                  {editingMasterTemplate
+                    ? `Update master template "${editingMasterTemplate}"`
+                    : "Save as master template"}
+                </Label>
+              </div>
+            )}
+
+            {!saveAsMaster && userTemplates.length > 0 && (
               <div className="space-y-2">
                 <Label>Overwrite existing template</Label>
                 <Input
@@ -781,7 +1041,7 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
                 />
                 <ScrollArea className="max-h-[160px]">
                   <div className="space-y-1">
-                    {templates
+                    {userTemplates
                       .filter(t => t.name.toLowerCase().includes(saveTemplateFilter.toLowerCase()))
                       .map(t => (
                         <button
@@ -797,34 +1057,73 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
                           <span className="ml-2 text-slate-400 font-normal">{t.mappings.length} mappings</span>
                         </button>
                       ))}
-                    {templates.filter(t => t.name.toLowerCase().includes(saveTemplateFilter.toLowerCase())).length === 0 && (
-                      <p className="text-sm text-slate-500 px-3 py-2">No templates match.</p>
-                    )}
+                    {userTemplates.filter(t => t.name.toLowerCase().includes(saveTemplateFilter.toLowerCase()))
+                      .length === 0 && <p className="text-sm text-slate-500 px-3 py-2">No templates match.</p>}
                   </div>
                 </ScrollArea>
               </div>
             )}
+
+            {saveAsMaster && masterTemplates.length > 0 && (
+              <div className="space-y-2">
+                <Label>Existing master templates</Label>
+                <ScrollArea className="max-h-[120px]">
+                  <div className="space-y-1">
+                    {masterTemplates.map(t => (
+                      <button
+                        key={t.name}
+                        type="button"
+                        onClick={() => setTemplateName(t.name)}
+                        className={`w-full text-left px-3 py-2 rounded-md text-sm border transition-colors ${
+                          templateName === t.name
+                            ? "border-amber-600 bg-amber-50 font-medium"
+                            : "border-transparent hover:bg-slate-50 hover:border-slate-200"
+                        }`}>
+                        {t.name}
+                        <span className="ml-2 text-slate-400 font-normal">{t.mappings.length} mappings</span>
+                      </button>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </div>
+            )}
+
             <div className="space-y-2">
-              <Label htmlFor="templateName">{templates.length > 0 ? "Or save as new template" : "Template Name"}</Label>
+              <Label htmlFor="templateName">
+                {saveAsMaster
+                  ? "Master template name"
+                  : userTemplates.length > 0
+                    ? "Or save as new template"
+                    : "Template Name"}
+              </Label>
               <Input
                 id="templateName"
-                placeholder="e.g., Banking Demo, Retail Config"
+                placeholder={saveAsMaster ? "e.g., Banking, Telecoms" : "e.g., Banking Demo, Retail Config"}
                 value={templateName}
                 onChange={e => setTemplateName(e.target.value)}
               />
             </div>
-            {templateName.trim() && templates.some(t => t.name === templateName.trim()) && (
-              <p className="text-sm text-amber-600">
-                This template will be overwritten.
+
+            {!saveAsMaster && saveNameMatchesMaster && (
+              <p className="text-sm text-red-600">
+                This name belongs to a master template. Use Copy, or choose a different name.
               </p>
+            )}
+            {!saveAsMaster && templateName.trim() && userTemplates.some(t => t.name === templateName.trim()) && (
+              <p className="text-sm text-amber-600">This template will be overwritten.</p>
+            )}
+            {saveAsMaster && templateName.trim() && masterTemplates.some(t => t.name === templateName.trim()) && (
+              <p className="text-sm text-amber-600">This master template will be overwritten.</p>
             )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsSaveTemplateDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSaveAsTemplate} disabled={!templateName.trim() || savingTemplate}>
-              {savingTemplate ? "Saving..." : "Save Template"}
+            <Button
+              onClick={handleSaveAsTemplate}
+              disabled={!templateName.trim() || savingTemplate || (!saveAsMaster && saveNameMatchesMaster)}>
+              {savingTemplate ? "Saving..." : saveAsMaster ? "Save Master Template" : "Save Template"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -837,24 +1136,18 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
           if (!open) setLoadTemplateFilter("")
           setIsLoadTemplateDialogOpen(open)
         }}>
-        <DialogContent>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Load Template</DialogTitle>
             <DialogDescription>
-              Select a template to load. This will replace the current mappings in the editor.
+              Load a user template to replace editor mappings, or copy a master template.
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
+          <div className="py-4 space-y-4">
             {loadingTemplates ? (
               <div className="text-center py-8 text-slate-500">
                 <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2" />
                 Loading templates...
-              </div>
-            ) : templates.length === 0 ? (
-              <div className="text-center py-8 text-slate-500">
-                <BookOpen className="h-8 w-8 mx-auto mb-2 text-slate-300" />
-                <p>No templates saved yet.</p>
-                <p className="text-sm">Use &quot;Save as Template&quot; to create one.</p>
               </div>
             ) : (
               <>
@@ -862,35 +1155,153 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
                   placeholder="Filter templates..."
                   value={loadTemplateFilter}
                   onChange={e => setLoadTemplateFilter(e.target.value)}
-                  className="mb-3"
                 />
-                <ScrollArea className="max-h-[300px]">
-                <div className="space-y-2">
-                  {templates.filter(t => t.name.toLowerCase().includes(loadTemplateFilter.toLowerCase())).length === 0 ? (
-                    <p className="text-sm text-slate-500 py-4 text-center">No templates match.</p>
-                  ) : templates.filter(t => t.name.toLowerCase().includes(loadTemplateFilter.toLowerCase())).map(template => (
-                    <div
-                      key={template.name}
-                      className="flex items-center justify-between p-3 rounded-lg border hover:bg-slate-50 cursor-pointer group"
-                      onClick={() => handleLoadTemplate(template)}>
-                      <div>
-                        <p className="font-medium">{template.name}</p>
-                        <p className="text-sm text-slate-500">{template.mappings.length} mappings</p>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-red-600 hover:text-red-700 opacity-0 group-hover:opacity-100"
-                        onClick={e => {
-                          e.stopPropagation()
-                          handleDeleteTemplate(template.name)
-                        }}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+
+                {/* Master Templates Section */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between py-1">
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Master Templates</p>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0 text-slate-400 hover:text-slate-700"
+                      title={adminMode ? "Exit admin mode" : "Enter admin mode"}
+                      onClick={() => {
+                        if (adminMode) {
+                          handleExitAdminMode()
+                        } else {
+                          setAdminPinInput("")
+                          setAdminPasswordError("")
+                          setIsAdminUnlockDialogOpen(true)
+                        }
+                      }}>
+                      {adminMode ? <LockOpen className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+                    </Button>
+                  </div>
+
+                  <ScrollArea className="max-h-[180px]">
+                    <div className="space-y-1">
+                      {masterTemplates.filter(t => t.name.toLowerCase().includes(loadTemplateFilter.toLowerCase()))
+                        .length === 0 ? (
+                        <p className="text-sm text-slate-400 px-3 py-2 italic">No master templates.</p>
+                      ) : (
+                        masterTemplates
+                          .filter(t => t.name.toLowerCase().includes(loadTemplateFilter.toLowerCase()))
+                          .map(template => (
+                            <div
+                              key={template.name}
+                              className="flex items-center justify-between px-3 py-2 rounded-lg border border-transparent hover:bg-slate-50 hover:border-slate-100">
+                              <div>
+                                <p className="font-medium text-sm">{template.name}</p>
+                                <p className="text-xs text-slate-500">{template.mappings.length} mappings</p>
+                              </div>
+                              <div className="flex gap-1">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 text-xs"
+                                  onClick={() => handleOpenCopyMaster(template)}>
+                                  <Copy className="h-3 w-3 mr-1" />
+                                  Copy
+                                </Button>
+                                {adminMode && (
+                                  <>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-7 text-xs"
+                                      onClick={() => handleEditMaster(template)}>
+                                      <Edit2 className="h-3 w-3" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-7 text-xs text-red-600 hover:text-red-700"
+                                      onClick={() => {
+                                        setMasterToDelete(template.name)
+                                        setIsLoadTemplateDialogOpen(false)
+                                      }}>
+                                      <Trash2 className="h-3 w-3" />
+                                    </Button>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          ))
+                      )}
                     </div>
-                  ))}
+                  </ScrollArea>
+
+                  {adminMode && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full text-xs text-amber-700 hover:text-amber-800 hover:bg-amber-50 border border-dashed border-amber-300 mt-1"
+                      onClick={async () => {
+                        setIsLoadTemplateDialogOpen(false)
+                        setTemplateName("")
+                        setSaveAsMaster(true)
+                        setSaveTemplateFilter("")
+                        await fetchTemplates()
+                        setIsSaveTemplateDialogOpen(true)
+                      }}>
+                      <Plus className="h-3 w-3 mr-1" />
+                      New Master Template
+                    </Button>
+                  )}
                 </div>
-                </ScrollArea>
+
+                {/* User Templates Section */}
+                <div className="space-y-1">
+                  <div className="py-1">
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                      Customised Templates
+                    </p>
+                  </div>
+
+                  <ScrollArea className="max-h-[180px]">
+                    <div className="space-y-1">
+                      {userTemplates.filter(t => t.name.toLowerCase().includes(loadTemplateFilter.toLowerCase()))
+                        .length === 0 ? (
+                        <p className="text-sm text-slate-400 px-3 py-2 italic">
+                          {userTemplates.length === 0
+                            ? 'No templates yet. Use "Save as Template" to create one.'
+                            : "No templates match."}
+                        </p>
+                      ) : (
+                        userTemplates
+                          .filter(t => t.name.toLowerCase().includes(loadTemplateFilter.toLowerCase()))
+                          .map(template => (
+                            <div
+                              key={template.name}
+                              className="flex items-center justify-between p-3 rounded-lg border hover:bg-slate-50 cursor-pointer group"
+                              onClick={() => handleLoadTemplate(template)}>
+                              <div>
+                                <p className="font-medium text-sm">{template.name}</p>
+                                <p className="text-xs text-slate-500">{template.mappings.length} mappings</p>
+                              </div>
+                              <div className="flex gap-1" onClick={e => e.stopPropagation()}>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 text-xs opacity-0 group-hover:opacity-100"
+                                  onClick={() => handleLoadTemplate(template)}>
+                                  Load
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 text-red-600 hover:text-red-700 opacity-0 group-hover:opacity-100"
+                                  onClick={() => handleDeleteTemplate(template.name)}>
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            </div>
+                          ))
+                      )}
+                    </div>
+                  </ScrollArea>
+                </div>
               </>
             )}
           </div>
@@ -902,6 +1313,114 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
         </DialogContent>
       </Dialog>
 
+      {/* Admin Unlock Dialog */}
+      <Dialog
+        open={isAdminUnlockDialogOpen}
+        onOpenChange={open => {
+          if (!open) {
+            setAdminPinInput("")
+            setAdminPasswordError("")
+          }
+          setIsAdminUnlockDialogOpen(open)
+        }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Lock className="h-4 w-4" />
+              Enter Admin Password
+            </DialogTitle>
+            <DialogDescription>Enter the password to manage master templates.</DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-3">
+            <Input
+              type="password"
+              placeholder="Password"
+              value={adminPasswordInput}
+              onChange={e => {
+                setAdminPinInput(e.target.value)
+                setAdminPasswordError("")
+              }}
+              onKeyDown={e => {
+                if (e.key === "Enter") handleVerifyPin()
+              }}
+              autoFocus
+            />
+            {adminPasswordError && <p className="text-sm text-red-600">{adminPasswordError}</p>}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsAdminUnlockDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleVerifyPin} disabled={!adminPasswordInput.trim() || verifyingPassword}>
+              {verifyingPassword ? "Verifying..." : "Unlock"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Copy Master Dialog */}
+      <Dialog
+        open={isCopyMasterDialogOpen}
+        onOpenChange={open => {
+          if (!open) {
+            setCopyMasterSource(null)
+            setCopyMasterName("")
+          }
+          setIsCopyMasterDialogOpen(open)
+        }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Copy &quot;{copyMasterSource?.name}&quot;</DialogTitle>
+            <DialogDescription>
+              Create a user template from this master template. Your current editor mappings are preserved.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-2">
+            <Label htmlFor="copyMasterName">New template name</Label>
+            <Input
+              id="copyMasterName"
+              value={copyMasterName}
+              onChange={e => setCopyMasterName(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === "Enter") handleConfirmCopyMaster()
+              }}
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsCopyMasterDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleConfirmCopyMaster} disabled={!copyMasterName.trim() || isCopyingMaster}>
+              {isCopyingMaster ? "Copying..." : "Copy"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Master Confirm Dialog */}
+      <Dialog
+        open={!!masterToDelete}
+        onOpenChange={open => {
+          if (!open) setMasterToDelete(null)
+        }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete master template</DialogTitle>
+            <DialogDescription>
+              This will permanently delete the &quot;{masterToDelete}&quot; master template. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMasterToDelete(null)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleConfirmDeleteMaster} disabled={isDeletingMaster}>
+              {isDeletingMaster ? "Deleting..." : "Delete master template"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

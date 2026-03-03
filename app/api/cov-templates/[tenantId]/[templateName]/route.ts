@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { readTemplatesFile, writeTemplatesFile } from "@/lib/cov-templates"
+import { readTemplatesFile, writeTemplatesFile, readMasterTemplatesFile } from "@/lib/cov-templates"
 
 export async function DELETE(
   request: NextRequest,
@@ -8,6 +8,12 @@ export async function DELETE(
   try {
     const { tenantId, templateName } = await params
     const decodedName = decodeURIComponent(templateName)
+
+    const masterData = await readMasterTemplatesFile()
+    const masterTemplates = masterData[tenantId] || []
+    if (masterTemplates.some(t => t.name === decodedName)) {
+      return NextResponse.json({ error: "Cannot delete a master template" }, { status: 400 })
+    }
 
     const data = await readTemplatesFile()
     const templates = data[tenantId] || []

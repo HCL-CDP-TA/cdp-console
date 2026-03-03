@@ -1,0 +1,150 @@
+{
+  "6552": [
+    {
+      "name": "Unibank",
+      "mappings": [
+        {
+          "key": "city",
+          "value": "City"
+        },
+        {
+          "key": "crmid",
+          "value": "User ID"
+        },
+        {
+          "key": "email_address",
+          "value": "Email Address"
+        },
+        {
+          "key": "mobile_phone",
+          "value": "Mobile No"
+        },
+        {
+          "key": "firstname",
+          "value": "First Name"
+        },
+        {
+          "key": "lastname",
+          "value": "Last Name"
+        },
+        {
+          "key": "mortage_rate",
+          "value": "Mortgage Rate"
+        },
+        {
+          "key": "initial_mortgage_value",
+          "value": "Initial Mortgage Value"
+        },
+        {
+          "key": "state",
+          "value": "Region"
+        },
+        {
+          "key": "credit_card_balance",
+          "value": "Credit Card Balance"
+        },
+        {
+          "key": "savings_balance",
+          "value": "Savings Balance"
+        },
+        {
+          "key": "calculator_payments",
+          "value": "Calculator Payments"
+        }
+      ],
+      "createdAt": "2026-03-03T01:33:30.780Z",
+      "type": "master"
+    },
+    {
+      "name": "Unitel",
+      "mappings": [
+        {
+          "key": "crmid",
+          "value": "User ID"
+        },
+        {
+          "key": "email_address",
+          "value": "Email Address"
+        },
+        {
+          "key": "mobile_phone",
+          "value": "Mobile No"
+        },
+        {
+          "key": "firstname",
+          "value": "First Name"
+        },
+        {
+          "key": "lastname",
+          "value": "Last Name"
+        },
+        {
+          "key": "city",
+          "value": "City"
+        },
+        {
+          "key": "state",
+          "value": "Region"
+        },
+        {
+          "key": "includedServices",
+          "value": "Services"
+        },
+        {
+          "key": "currentBalance",
+          "value": "Current Balance"
+        },
+        {
+          "key": "customerTier",
+          "value": "Customer Tier"
+        },
+        {
+          "key": "averageRevenuePerMonth",
+          "value": "Monthly Revenue"
+        },
+        {
+          "key": "churnRisk",
+          "value": "Churn Risk"
+        },
+        {
+          "key": "sentimentScore",
+          "value": "Sentiment Score"
+        },
+        {
+          "key": "upsellPropensity",
+          "value": "Upsell Propensity"
+        },
+        {
+          "key": "dataUsageGB",
+          "value": "Data Usage"
+        },
+        {
+          "key": "deviceRemainingPayments",
+          "value": "Remaining Device Payments"
+        },
+        {
+          "key": "deviceFinanced",
+          "value": "Device Financed\t"
+        },
+        {
+          "key": "deviceUpgradePropensity",
+          "value": "Device Upgrade Propensity"
+        },
+        {
+          "key": "product_interest",
+          "value": "Product Interest"
+        },
+        {
+          "key": "selector_recommended_plan",
+          "value": "Recommended Plan"
+        },
+        {
+          "key": "autoRenewEnabled",
+          "value": "auto renew"
+        }
+      ],
+      "createdAt": "2026-03-03T01:33:50.274Z",
+      "type": "master"
+    }
+  ]
+}
