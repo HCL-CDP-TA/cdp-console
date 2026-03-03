@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.1](https://github.com/HCL-CDP-TA/cdp-console/compare/v1.3.0...v1.3.1) (2026-03-03)
+
+
+### Bug Fixes
+
+* **deployment:** pass MASTER_TEMPLATE_PASSWORD to container and seed data volume ([35f5ea7](https://github.com/HCL-CDP-TA/cdp-console/commit/35f5ea711bf554287ea5b452d0675480b26a9d2e))
+
 ## [1.3.0](https://github.com/HCL-CDP-TA/cdp-console/compare/v1.2.0...v1.3.0) (2026-03-03)
 
 
