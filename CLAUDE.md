@@ -395,7 +395,7 @@ NEXT_PUBLIC_GA_ID=G-XXXXXXXXXX
 - Output: Standalone (Next.js optimization)
 - Images: Unoptimized (for compatibility)
 
-See `DEPLOYMENT.md` for full deployment guide.
+See `docs/DEPLOYMENT.md` for full deployment guide.
 
 ### Deployment checklist for new features
 
@@ -408,7 +408,7 @@ When adding a new **persistent data file** under `data/`, no extra deploy change
 
 ## Testing
 
-**Local GitHub Actions Testing**: Use `act` (see `scripts/LOCAL_TESTING.md`)
+**Local GitHub Actions Testing**: Use `act` (see `docs/LOCAL_TESTING.md`)
 ```bash
 act release --secret-file .secrets
 ```
@@ -435,8 +435,9 @@ netlify dev          # Local functions
 ## Additional Documentation
 
 - `.github/copilot-instructions.md` - Detailed development patterns and API structures
-- `DEPLOYMENT.md` - Docker deployment guide with health checks and troubleshooting
+- `docs/DEPLOYMENT.md` - Docker deployment guide with health checks and troubleshooting
+- `docs/CORE_API_DOCUMENTATION.md` - Core API reference
 - `docs/analytics-tracking.md` - Google Analytics event tracking patterns
 - `docs/google-analytics.md` - Analytics implementation details
-- `scripts/LOCAL_TESTING.md` - GitHub Actions local testing with `act`
+- `docs/LOCAL_TESTING.md` - GitHub Actions local testing with `act`
 - `.env.example` - Environment variable template
