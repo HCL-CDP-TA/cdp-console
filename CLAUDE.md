@@ -397,6 +397,15 @@ NEXT_PUBLIC_GA_ID=G-XXXXXXXXXX
 
 See `DEPLOYMENT.md` for full deployment guide.
 
+### Deployment checklist for new features
+
+When adding a new **environment variable**, update all three artefacts:
+1. `.env.example` — add with empty value and a comment
+2. `deploy.sh` — add `-e VAR_NAME="${VAR_NAME:-}"` to the `docker run` block
+3. `docker-compose.yml` — add `- VAR_NAME=${VAR_NAME:-}` under `environment:`
+
+When adding a new **persistent data file** under `data/`, no extra deploy changes are needed — the Dockerfile copies the entire `data/` directory from the builder stage, so seed files are baked into the image and initialise fresh volumes automatically.
+
 ## Testing
 
 **Local GitHub Actions Testing**: Use `act` (see `scripts/LOCAL_TESTING.md`)
