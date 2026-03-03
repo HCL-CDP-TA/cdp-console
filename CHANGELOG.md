@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/HCL-CDP-TA/cdp-console/compare/v1.2.0...v1.3.0) (2026-03-03)
+
+
+### Features
+
+* **customer-one-view:** add master template system with admin password protection ([2056190](https://github.com/HCL-CDP-TA/cdp-console/commit/2056190e0ad7e8c81d7d6185f5caacc1ef725516))
+
 ## [1.2.0](https://github.com/HCL-CDP-TA/cdp-console/compare/v1.1.2...v1.2.0) (2026-03-01)
 
 
