@@ -80,8 +80,8 @@ LABEL org.opencontainers.image.created=$BUILD_DATE
 LABEL org.opencontainers.image.revision=$VCS_REF
 LABEL org.opencontainers.image.version=$VERSION
 
-# Create data directory for persistent storage (e.g., COV templates)
-RUN mkdir -p /app/data && chown nextjs:nodejs /app/data
+# Copy data directory with seed files (initialises fresh volumes on first run)
+COPY --from=builder --chown=nextjs:nodejs /app/data ./data
 
 # Switch to non-root user
 USER nextjs

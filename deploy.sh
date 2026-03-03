@@ -227,6 +227,7 @@ docker run -d \
     -e NEXT_PUBLIC_DEFAULT_API_ENDPOINT="${NEXT_PUBLIC_DEFAULT_API_ENDPOINT:-https://dmp-sst-api.dev.hxcd.now.hclsoftware.cloud}" \
     -e NEXT_PUBLIC_DEFAULT_API_KEY="${NEXT_PUBLIC_DEFAULT_API_KEY:-}" \
     -e NEXT_PUBLIC_GA_ID="${NEXT_PUBLIC_GA_ID:-}" \
+    -e MASTER_TEMPLATE_PASSWORD="${MASTER_TEMPLATE_PASSWORD:-}" \
     "${TENANT_ENV_ARGS[@]}" \
     --label "app=$APP_NAME" \
     --label "environment=$ENVIRONMENT" \

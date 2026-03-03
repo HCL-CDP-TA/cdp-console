@@ -32,6 +32,7 @@ services:
       - NEXT_PUBLIC_DEFAULT_API_ENDPOINT=${NEXT_PUBLIC_DEFAULT_API_ENDPOINT:-}
       - NEXT_PUBLIC_DEFAULT_API_KEY=${NEXT_PUBLIC_DEFAULT_API_KEY:-}
       - NEXT_PUBLIC_GA_ID=${NEXT_PUBLIC_GA_ID:-}
+      - MASTER_TEMPLATE_PASSWORD=${MASTER_TEMPLATE_PASSWORD:-}
     labels:
       - "app=cdp-console"
       - "environment=${ENVIRONMENT:-production}"
