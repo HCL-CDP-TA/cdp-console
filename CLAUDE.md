@@ -399,7 +399,7 @@ See `DEPLOYMENT.md` for full deployment guide.
 
 ### Deployment checklist for new features
 
-When adding a new **environment variable**, update all three artefacts:
+When adding a new **environment variable**, update all three artefacts in the same commit as the feature (or use `fix` type so release-please picks it up):
 1. `.env.example` — add with empty value and a comment
 2. `deploy.sh` — add `-e VAR_NAME="${VAR_NAME:-}"` to the `docker run` block
 3. `docker-compose.yml` — add `- VAR_NAME=${VAR_NAME:-}` under `environment:`
