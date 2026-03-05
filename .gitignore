@@ -45,3 +45,4 @@ next-env.d.ts
 
 # Template data (persisted via Docker volume)
 /data/cov-templates.json
+/data/master-templates.json

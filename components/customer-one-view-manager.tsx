@@ -161,6 +161,12 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
   // Editing master template state
   const [editingMasterTemplate, setEditingMasterTemplate] = useState<string | null>(null)
   const [saveAsMaster, setSaveAsMaster] = useState(false)
+  const [saveMasterPassword, setSaveMasterPassword] = useState("")
+  const [saveMasterPasswordError, setSaveMasterPasswordError] = useState("")
+
+  // Currently loaded template indicator
+  const [loadedTemplateName, setLoadedTemplateName] = useState<string | null>(null)
+  const [loadedTemplateType, setLoadedTemplateType] = useState<"master" | "user" | null>(null)
 
   // Copy master dialog
   const [isCopyMasterDialogOpen, setIsCopyMasterDialogOpen] = useState(false)
@@ -439,12 +445,13 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
     setSavingTemplate(true)
 
     if (saveAsMaster) {
+      setSaveMasterPasswordError("")
       try {
         const response = await fetch(`/api/cov-templates/${tenant.id}/masters`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "x-master-password": adminPassword,
+            "x-master-password": saveMasterPassword,
           },
           body: JSON.stringify({
             name: templateName.trim(),
@@ -456,7 +463,10 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
           setIsSaveTemplateDialogOpen(false)
           setTemplateName("")
           setSaveAsMaster(false)
+          setSaveMasterPassword("")
           if (editingMasterTemplate) setEditingMasterTemplate(null)
+        } else if (response.status === 401 || response.status === 403) {
+          setSaveMasterPasswordError("Incorrect password")
         } else {
           setErrorMessage("Failed to save master template")
         }
@@ -493,7 +503,7 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
     } finally {
       setSavingTemplate(false)
     }
-  }, [templateName, mappings, tenant.id, saveAsMaster, adminPassword, editingMasterTemplate])
+  }, [templateName, mappings, tenant.id, saveAsMaster, saveMasterPassword, editingMasterTemplate])
 
   const handleLoadTemplate = useCallback((template: CovTemplate) => {
     const loadedMappings: MappingItem[] = template.mappings.map((m, index) => ({
@@ -502,6 +512,8 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
       value: m.value,
     }))
     setMappings(loadedMappings)
+    setLoadedTemplateName(template.name)
+    setLoadedTemplateType("user")
     setIsLoadTemplateDialogOpen(false)
     setSuccessMessage(`Template "${template.name}" loaded. Apply Changes to persist to CDP.`)
     trackUserAction("load_cov_template", { templateName: template.name, mappingCount: template.mappings.length })
@@ -568,6 +580,19 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
     }
   }, [copyMasterSource, copyMasterName, tenant.id, fetchTemplates])
 
+  const handleLoadMaster = useCallback((template: CovTemplate) => {
+    const loadedMappings: MappingItem[] = template.mappings.map((m, index) => ({
+      id: `mapping-${index}`,
+      key: m.key,
+      value: m.value,
+    }))
+    setMappings(loadedMappings)
+    setLoadedTemplateName(template.name)
+    setLoadedTemplateType("master")
+    setIsLoadTemplateDialogOpen(false)
+    setSuccessMessage(`Loaded master template "${template.name}".`)
+  }, [])
+
   const handleEditMaster = useCallback((template: CovTemplate) => {
     const loadedMappings: MappingItem[] = template.mappings.map((m, index) => ({
       id: `mapping-${index}`,
@@ -576,6 +601,8 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
     }))
     setMappings(loadedMappings)
     setEditingMasterTemplate(template.name)
+    setLoadedTemplateName(template.name)
+    setLoadedTemplateType("master")
     setIsLoadTemplateDialogOpen(false)
     setSuccessMessage(`Loaded master template "${template.name}" for editing.`)
   }, [])
@@ -764,6 +791,27 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
               className="ml-auto h-6 text-amber-700 hover:text-amber-800 hover:bg-amber-100"
               onClick={() => setEditingMasterTemplate(null)}>
               Cancel edit
+            </Button>
+          </div>
+        )}
+
+        {loadedTemplateName && (
+          <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-md text-slate-600 text-sm">
+            <BookOpen className="h-4 w-4 shrink-0" />
+            <span>
+              Loaded from{" "}
+              {loadedTemplateType === "master" ? "master template" : "template"}:{" "}
+              <strong>{loadedTemplateName}</strong>
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="ml-auto h-6 text-slate-500 hover:text-slate-700 hover:bg-slate-100"
+              onClick={() => {
+                setLoadedTemplateName(null)
+                setLoadedTemplateType(null)
+              }}>
+              Dismiss
             </Button>
           </div>
         )}
@@ -1004,6 +1052,8 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
           if (!open) {
             setSaveTemplateFilter("")
             setSaveAsMaster(false)
+            setSaveMasterPassword("")
+            setSaveMasterPasswordError("")
           }
           setIsSaveTemplateDialogOpen(open)
         }}>
@@ -1013,13 +1063,15 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
             <DialogDescription>Save the current mappings as a reusable template for this tenant.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            {adminMode && (
+            <div className="space-y-3">
               <div className="flex items-center gap-2 p-3 border rounded-md bg-amber-50 border-amber-200">
                 <Checkbox
                   id="saveAsMaster"
                   checked={saveAsMaster}
                   onCheckedChange={v => {
                     setSaveAsMaster(!!v)
+                    setSaveMasterPassword("")
+                    setSaveMasterPasswordError("")
                     setTemplateName(v && editingMasterTemplate ? editingMasterTemplate : "")
                   }}
                 />
@@ -1029,7 +1081,23 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
                     : "Save as master template"}
                 </Label>
               </div>
-            )}
+              {saveAsMaster && (
+                <div className="space-y-1">
+                  <Input
+                    type="password"
+                    placeholder="Admin password"
+                    value={saveMasterPassword}
+                    onChange={e => {
+                      setSaveMasterPassword(e.target.value)
+                      setSaveMasterPasswordError("")
+                    }}
+                  />
+                  {saveMasterPasswordError && (
+                    <p className="text-sm text-red-600">{saveMasterPasswordError}</p>
+                  )}
+                </div>
+              )}
+            </div>
 
             {!saveAsMaster && userTemplates.length > 0 && (
               <div className="space-y-2">
@@ -1105,8 +1173,8 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
             </div>
 
             {!saveAsMaster && saveNameMatchesMaster && (
-              <p className="text-sm text-red-600">
-                This name belongs to a master template. Use Copy, or choose a different name.
+              <p className="text-sm text-amber-700">
+                This name belongs to a master template. Check &quot;Save as master template&quot; above to overwrite it.
               </p>
             )}
             {!saveAsMaster && templateName.trim() && userTemplates.some(t => t.name === templateName.trim()) && (
@@ -1122,7 +1190,12 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
             </Button>
             <Button
               onClick={handleSaveAsTemplate}
-              disabled={!templateName.trim() || savingTemplate || (!saveAsMaster && saveNameMatchesMaster)}>
+              disabled={
+                !templateName.trim() ||
+                savingTemplate ||
+                (!saveAsMaster && saveNameMatchesMaster) ||
+                (saveAsMaster && !saveMasterPassword)
+              }>
               {savingTemplate ? "Saving..." : saveAsMaster ? "Save Master Template" : "Save Template"}
             </Button>
           </DialogFooter>
@@ -1196,6 +1269,14 @@ export const CustomerOneViewManager = ({ tenant, onAuthExpired }: CustomerOneVie
                                 <p className="text-xs text-slate-500">{template.mappings.length} mappings</p>
                               </div>
                               <div className="flex gap-1">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 text-xs"
+                                  onClick={() => handleLoadMaster(template)}>
+                                  <BookOpen className="h-3 w-3 mr-1" />
+                                  Load
+                                </Button>
                                 <Button
                                   variant="outline"
                                   size="sm"
