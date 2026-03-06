@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.1](https://github.com/HCL-CDP-TA/cdp-console/compare/v1.4.0...v1.4.1) (2026-03-06)
+
+
+### Bug Fixes
+
+* **deployment:** create data directory in builder stage to prevent Docker build failure ([4d4c6e6](https://github.com/HCL-CDP-TA/cdp-console/commit/4d4c6e605e01dae561c3fcbe81e77d2998cba5f6))
+
 ## [1.4.0](https://github.com/HCL-CDP-TA/cdp-console/compare/v1.3.1...v1.4.0) (2026-03-05)
 
 
