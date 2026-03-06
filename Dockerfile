@@ -43,8 +43,8 @@ ENV NEXT_PUBLIC_GA_ID=$NEXT_PUBLIC_GA_ID
 # Build the application
 RUN npm run build
 
-# Ensure public directory exists (create empty one if needed)
-RUN mkdir -p /app/public
+# Ensure public and data directories exist (create empty ones if needed)
+RUN mkdir -p /app/public /app/data
 
 # Production image, copy all the files and run next
 FROM base AS runner
