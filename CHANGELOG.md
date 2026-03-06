@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0](https://github.com/HCL-CDP-TA/cdp-console/compare/v1.3.1...v1.4.0) (2026-03-05)
+
+
+### Features
+
+* **customer-one-view:** allow loading master templates without password ([c2a754e](https://github.com/HCL-CDP-TA/cdp-console/commit/c2a754e1ceaffda02d72a7e807db854f300a65bb))
+
 ## [1.3.1](https://github.com/HCL-CDP-TA/cdp-console/compare/v1.3.0...v1.3.1) (2026-03-03)
 
 
